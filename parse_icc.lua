@@ -690,7 +690,7 @@ local function synthesize_matrix_transforms(profile)
     matrix[4], matrix[5], matrix[6] = rXYZ[2], gXYZ[2], bXYZ[2]
     matrix[7], matrix[8], matrix[9] = rXYZ[3], gXYZ[3], bXYZ[3]
     profile.A2B0 = {
-      curves, matrix, decode_xyz,
+      curves, matrix,
       kind = "matrix/TRC",
       map = map_pipeline,
     }
@@ -699,7 +699,7 @@ local function synthesize_matrix_transforms(profile)
     curves = table.move(curves, 1, 3, 1, {})
     curves.map = map_curves_inverse
     profile.B2A0 = {
-      encode_xyz, matrix, curves,
+      matrix, curves,
       kind = "matrix/TRC",
       map = map_pipeline,
     }

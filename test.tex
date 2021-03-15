@@ -6,65 +6,71 @@
 \LoadProfile\SRGB{sRGB.icc}
 \LoadProfile\fogra{FOGRA39L_coated.icc}
 \ExplSyntaxOn
-\tl_set:No \l_tmpa_tl {\fogra 1~\sRGB 0~0~1}
+\tl_set:No \l_tmpa_tl {\fogra delim, 1~\SRGB 1~1~1}
+\tl_show:N\l_tmpa_tl
+\tl_set:No \l_tmpa_tl {\fogra delim, 1~\SRGB 0~0~0}
+\tl_show:N\l_tmpa_tl
+\tl_set:No \l_tmpa_tl {\fogra delim, 1~\SRGB 1~0~0}
+\tl_show:N\l_tmpa_tl
+\tl_set:No \l_tmpa_tl {\fogra delim, 1~\SRGB 0~1~0}
+\tl_show:N\l_tmpa_tl
+\tl_set:No \l_tmpa_tl {\fogra delim, 1~\SRGB 0~0~1}
 \tl_show:N\l_tmpa_tl
 \tl_set:No \l_tmpa_tl {\sRGB 1~\fogra\fogra 1~\sRGB 0~0~1}
 \tl_show:N\l_tmpa_tl
-\tl_set:No \l_tmpa_tl {\sRGB 1~\fogra\fogra 1~\sRGB \l_tmpa_tl}
+\tl_set:No \l_tmpa_tl {\sRGB delim, 1~\fogra\fogra 1~\sRGB \l_tmpa_tl}
 \tl_show:N\l_tmpa_tl
 \color_set:nnn{BLK}{rgb}{0, 0, 0}
-\cs_new:Npn\my_list_to_clist:w#1~#2~#3~{#1, #2, #3}
-\cs_new:Npn\my_list_to_clist_k:w#1~#2~#3~#4~{#1, #2, #3, #4}
 1a\int_step_inline:nnn{0}{100}{
   \color_select:n{red!#1!green}\vrule width 1pt
 }\par
 1b\int_step_inline:nnn{0}{100}{
-  \exp_args:Nnf\color_select:nn{rgb}{\exp_last_unbraced:No\my_list_to_clist:w\sRGB 2~\sRGB 1~0~0~#10~\sRGB 0~1~0~~}\vrule width 1pt
+  \exp_args:Nnf\color_select:nn{rgb}{\sRGB delim, 2~\sRGB 1~0~0~#10~\sRGB 0~1~0~~}\vrule width 1pt
 }\par
 2a\int_step_inline:nnn{0}{100}{
   \color_select:n{green!#1!blue}\vrule width 1pt
 }\par
 2b\int_step_inline:nnn{0}{100}{
-  \exp_args:Nnf\color_select:nn{rgb}{\exp_last_unbraced:No\my_list_to_clist:w\sRGB 2~\sRGB 0~1~0~#10~\sRGB 0~0~1~~}\vrule width 1pt
+  \exp_args:Nnf\color_select:nn{rgb}{\sRGB delim, 2~\sRGB 0~1~0~#10~\sRGB 0~0~1~~}\vrule width 1pt
 }\par
 3a\int_step_inline:nnn{0}{100}{
   \color_select:n{blue!#1!red}\vrule width 1pt
 }\par
 3b\int_step_inline:nnn{0}{100}{
-  \exp_args:Nnf\color_select:nn{rgb}{\exp_last_unbraced:No\my_list_to_clist:w\sRGB 2~\sRGB 0~0~1~#10~\sRGB 1~0~0~~}\vrule width 1pt
+  \exp_args:Nnf\color_select:nn{rgb}{\sRGB delim, 2~\sRGB 0~0~1~#10~\sRGB 1~0~0~~}\vrule width 1pt
 }\par
 4a\int_step_inline:nnn{0}{100}{
   \color_select:n{red!#1!white}\vrule width 1pt
 }\par
 4b\int_step_inline:nnn{0}{100}{
-  \exp_args:Nnf\color_select:nn{rgb}{\exp_last_unbraced:No\my_list_to_clist:w\sRGB 2~\sRGB 1~0~0~#10~\sRGB 1~1~1~~}\vrule width 1pt
+  \exp_args:Nnf\color_select:nn{rgb}{\sRGB delim, 2~\sRGB 1~0~0~#10~\sRGB 1~1~1~~}\vrule width 1pt
 }\par
 5a\int_step_inline:nnn{0}{100}{
   \color_select:n{green!#1!white}\vrule width 1pt
 }\par
 5b\int_step_inline:nnn{0}{100}{
-  \exp_args:Nnf\color_select:nn{rgb}{\exp_last_unbraced:No\my_list_to_clist:w\sRGB 2~\sRGB 0~1~0~#10~\sRGB 1~1~1~~}\vrule width 1pt
+  \exp_args:Nnf\color_select:nn{rgb}{\sRGB delim, 2~\sRGB 0~1~0~#10~\sRGB 1~1~1~~}\vrule width 1pt
 }\par
 6a\int_step_inline:nnn{0}{100}{
   \color_select:n{blue!#1!white}\vrule width 1pt
 }\par
 6b\int_step_inline:nnn{0}{100}{
-  \exp_args:Nnf\color_select:nn{rgb}{\exp_last_unbraced:No\my_list_to_clist:w\sRGB 2~\sRGB 0~0~1~#10~\sRGB 1~1~1~~}\vrule width 1pt
+  \exp_args:Nnf\color_select:nn{rgb}{\sRGB delim, 2~\sRGB 0~0~1~#10~\sRGB 1~1~1~~}\vrule width 1pt
 }\par
  6c\int_step_inline:nnn{0}{100}{
-   \exp_args:Nnf\color_select:nn{cmyk}{\exp_last_unbraced:No\my_list_to_clist_k:w\fogra 2~\sRGB 0~0~1~#10~\sRGB 1~1~1~~}\vrule width 1pt
+   \exp_args:Nnf\color_select:nn{cmyk}{\fogra delim, 2~\sRGB 0~0~1~#10~\sRGB 1~1~1~~}\vrule width 1pt
  }\par
  6d\int_step_inline:nnn{0}{100}{
-   \exp_args:Nnf\color_select:nn{rgb}{\exp_last_unbraced:No\my_list_to_clist:w\SRGB 2~\SRGB 0~0~1~#10~\SRGB 1~1~1~~}\vrule width 1pt
+   \exp_args:Nnf\color_select:nn{rgb}{\SRGB delim, 2~\SRGB 0~0~1~#10~\SRGB 1~1~1~~}\vrule width 1pt
  }\par
  6e\int_step_inline:nnn{0}{100}{
-   \exp_args:Nnf\color_select:nn{rgb}{\exp_last_unbraced:No\my_list_to_clist:w\sRGB 2~\SRGB 0~0~1~#10~\SRGB 1~1~1~~}\vrule width 1pt
+   \exp_args:Nnf\color_select:nn{rgb}{\sRGB delim, 2~\SRGB 0~0~1~#10~\SRGB 1~1~1~~}\vrule width 1pt
  }\par
  7a\int_step_inline:nnn{0}{100}{
    \color_select:n{BLK!#1!white}\vrule width 1pt
  }\par
  7b\int_step_inline:nnn{0}{100}{
-   \exp_args:Nnf\color_select:nn{rgb}{\exp_last_unbraced:No\my_list_to_clist:w\sRGB 2~\sRGB 0~0~0~#10~\sRGB 1~1~1~~}\vrule width 1pt
+   \exp_args:Nnf\color_select:nn{rgb}{\sRGB delim, 2~\sRGB 0~0~0~#10~\sRGB 1~1~1~~}\vrule width 1pt
  }\par
 \ExplSyntaxOff
 % \sRGB 1 \sRGB 1 0 0
