@@ -633,10 +633,179 @@ local function read_mft(f, size, precision, tag, header)
   return mapping
 end
 
+local read_mpet do
+  local function readfloattable(f, count)
+    local t = {string.unpack(f:read(4*count), string.rep("f", count))}
+    t[#t] = nil -- Remove final offset
+    assert(#t == count) -- TODO: Drop after testing
+    return t
+  end
+
+  local function map_big_matrix(matrix, values)
+    local val = {}
+    local in_channels = matrix.in_channels
+    local out_channels = matrix.out_channels
+    local constants_offset = in_channels * out_channels
+    for i=1, out_channels do
+      local value = matrix[constants_offset+i]
+      for j=1, in_channels do
+        value = value + values[j]*matrix[in_channels*(i-1)+j]
+      end
+      val[i] = value
+    end
+    return val
+  end
+
+  local function map_curf(curf, value)
+    local breakpoints = curf.breakpoints
+    local i, j = 1, #breakpoints
+    if j == 0 or value <= breakpoints[1] then
+      i, j = 0, 1
+    elseif value > breakpoints[j] then
+      i, j = j, j+1
+    else
+      while j-i > 1 do
+        local k = i + (j-i)//2
+        if value > curv[k] then
+          i = k
+        else
+          j = k
+        end
+      end
+    end
+    return curf[j]:map(value, breakpoints[i], breakpoints[j])
+  end
+
+  local function map_samf(samf, value, prev_break, next_break)
+    local count = #samf
+    value = (value-prev_break) / (next_break-prev_break)
+    local val_int, val_float = math.modf(value * count)
+    if val_float > 0.000000001 then
+      return ((1-val_float)*samf[val_int] + val_float*samf[val_int+1])
+    else -- The second case is not just slightly faster in easy cases,
+         --it avoids an invalid lookup if value==1
+      return samf[val_int]
+    end
+  end
+
+  local log = math.log
+  local map_parf = { [0] =
+    function(parf, value)
+      return (parf[2]*value+parf[3])^parf[1]+parf[4]
+    end,
+    function(parf, value)
+      return parf[2]*log(parf[3]*value^parf[1]+parf[4], 10) + parf[5]
+    end,
+    function(parf, value)
+      return parf[1]*parf[2]^(parf[3]*value+parf[4])+parf[5]
+    end,
+  }
+
+  local function read_segment(f, carry, prev_break, next_break)
+    local tag = read_tag(f)
+    if tag == 'parf' then
+      skipposition(f, 4)
+      local kind = readu16(f)
+      skipposition(f, 2)
+      local parameters = readfloattable(f, assert(0 and 4 or 1 or 2 and 5))
+      parameters.map = map_parf[kind]
+      return parameters, parameters:map(next_break, prev_break, next_break)
+    elseif tag == 'samf' then
+      skipposition(f, 4)
+      local count = readu32(f)
+      local entries = readfloattable(f, count)
+      entries.map = map_samf
+      entries[0] = carry
+      return entries, entries[count]
+    else
+      error[[Unknown segment]]
+    end
+  end
+
+  local mpet_readers = {
+    cvst = function(f, size, offset)
+      skipposition(f, 4)
+      local channels = readu16(f)
+      assert(channels == readu16(f))
+      local positions, sizes = {}, {}
+      for i=1, channels do
+        positions[i], sizes[i] = read_position_number(f)
+      end
+      local curves = {
+        map = map_curves,
+        in_channels = channels,
+        out_channels = channels,
+      }
+      for i=1, channels do
+        setposition(f, offset + positions[i])
+        assert(read_tag(f) == 'curf')
+        skipposition(4)
+        local num_segments = readu16(f)
+        skipposition(2)
+        local breakpoints = readfloattable(f, num_segments-1)
+        local segments = {
+          map = map_curf,
+          breakpoints = breakpoints,
+        }
+        local carry
+        for j=1, num_segments do
+          segments[j], carry = read_segment(f, carry, breakpoints[j-1], breakpoints[j])
+        end
+        curves[i] = segments
+      end
+      return curves
+    end,
+    matf = function(f, size)
+      skipposition(f, 4)
+      local in_channels = readu16(f)
+      local out_channels = readu16(f)
+      assert(size == 12 + (in_channels+1)*out_channels*4)
+      local matrix = readfloattable(f, (in_channels+1)*out_channels)
+      matrix.in_channels = in_channels
+      matrix.out_channels = out_channels
+      matrix.map = map_big_matrix
+      return matrix
+    end,
+    clut = nil, -- TODO
+    bACS = nil, -- TODO
+    eACS = nil, -- TODO
+  }
+
+  function read_mpet(f, size, offset)
+    skipposition(f, 4)
+    local channels = readu16(f)
+    local final_out_channels = readu16(f)
+    local elements = readu16(f)
+    local positions, sizes = {}, {}
+    for i=1, elements do
+      positions[i], sizes[i] = read_position_number(f)
+    end
+    local steps = {
+      map = map_pipeline,
+    }
+    for i=1, elements do
+      local off = offset + positions[i]
+      setposition(f, off)
+      local tag = read_tag(f)
+      local reader = mpet_readers[tag]
+      if not reader then
+        return -- Unsupported tag ~~> fall back to A2B/B2A
+      end
+      steps[i] = reader(f, sizes[i], off, tag)
+      assert(steps[i].in_channels == channels)
+      channels = steps[i].out_channels
+    end
+
+    assert(channels == final_out_channels)
+    return mapping
+  end
+end
+
 -- Interface for readers: reader(f, size, offset, tag, profile)
 -- f is set to a position 4 bytes after offset and size includes these 4 bytes.
 -- The return value is set as value for profile[tag]
 local tag_readers = {
+  mpet = read_mpet,
   mluc = read_localized_unicode,
   mft1 = function(f, size, _offset, tag, profile) return read_mft(f, size, 1, tag, profile.header) end,
   mft2 = function(f, size, _offset, tag, profile) return read_mft(f, size, 2, tag, profile.header) end,
