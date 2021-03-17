@@ -10,7 +10,7 @@ functions[funcid] = function()
   token.put_next(token.create'noexpand')
   local csname = token.scan_token().csname
   local filename = token.scan_argument()
-  local profile = parse_icc.load(kpse.find_file(filename))
+  local profile = assert(parse_icc.load(kpse.find_file(filename)))
   local profile_id = luatexbase.new_luafunction('Lua loaded colorprofile ' .. filename)
   token.set_lua(csname, profile_id)
   functions[profile_id] = handler
@@ -35,7 +35,7 @@ function handler(id)
     end
     local prof = loaded_profiles[index]
     local components = {}
-    local num_components = parse_icc.input_components(prof)
+    local num_components = assert(parse_icc.input_components(prof))
     for j = 1, num_components do
       components[j] = token.scan_real()
     end
@@ -47,7 +47,7 @@ function handler(id)
       args[3*i+2] = factor
     end
   end
-  local result = parse_icc.interpolate(table.unpack(args))
+  local result = assert(parse_icc.interpolate(table.unpack(args)))
   tex.sprint(-2, string.format("%.4f", result[1]))
   for i=2, #result do
     tex.sprint(-2, delim)

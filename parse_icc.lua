@@ -1,9 +1,9 @@
-local show do
-  local inspect = require'inspect'
-  function show(...)
-    return print(inspect(...))
-  end
-end
+-- local show do
+--   local inspect = require'inspect'
+--   function show(...)
+--     return print(inspect(...))
+--   end
+-- end
 
 local readu8 = fio.readcardinal1
 local readu16 = fio.readcardinal2
@@ -20,23 +20,24 @@ local function from_utf16be(s)
   local i = 0
   local cached
   for high, low in string.bytepairs(s) do
-    if not low then error[[Not a UTF-16 string]] end
+    if not low then return nil, "Invalid number of bytes for UTF-16 string" end
     if high & 0xF8 == 0xD8 then
       if high & 4 == 4 then
-        assert(not cached)
+        if cached then return nil, "Invalid surrogate in UTF-16 string" end
         cached = ((high & 3) << 18) | (low << 10)
       else
+        if not cached then return nil, "Invalid surrogate in UTF-16 string" end
         i = i+1
-        codepoints[i] = 0x10000 + (assert(cached) | ((high & 3) << 2) | low)
+        codepoints[i] = 0x10000 + (cached | ((high & 3) << 2) | low)
         cached = nil
       end
     else
-      assert(not cached)
+      if cached then return nil, "Invalid surrogate in UTF-16 string" end
       i = i+1
       codepoints[i] = (high << 8) + low
     end
   end
-  assert(not cached)
+  if cached then return nil, "Invalid surrogate in UTF-16 string" end
   return utf8.char(table.unpack(codepoints))
 end
 
@@ -116,10 +117,8 @@ local function read_localized_unicode(f, size, pos0)
   for i=1, count do
     local record = records[i]
     setposition(f, pos0 + record[4])
-    if record[3] % 1 == 1 then
-      error[[Invalid number of bytes for UTF-16 string]]
-    end
-    local str = from_utf16be(f:read(record[3]))
+    local str, err = from_utf16be(f:read(record[3]))
+    if not str then return nil, err end
     local lang = strings[record[1]]
     if lang then
       lang[record[2]] = str
@@ -141,14 +140,14 @@ local function read_header(f)
   info.preferred_cmm = read_tag(f)
   info.version = readu32(f)
   if info.version >= 0x05000000 then
-    error [[Unsupported version]]
+    return nil, [[Unsupported version]]
   end
   info.profile_class = read_tag(f)
   info.colorspace_a = read_tag(f)
   info.colorspace_pcs = read_tag(f)
   info.creation_date = read_date(f)
   if read_tag(f) ~= "acsp" then
-    error [[Not a profile file]]
+    return nil, [[Not a profile file]]
   end
   info.primary_platform = read_tag(f)
   info.flags = readu32(f)
@@ -160,8 +159,8 @@ local function read_header(f)
   do
     local x, y, z = read_xyz(f)
     if x ~= pcs_illuminant_x or y ~= pcs_illuminant_y or z ~= pcs_illuminant_z then
-      print(x, pcs_illuminant_x, y, pcs_illuminant_y, z, pcs_illuminant_z)
-      error[[Invalid illuminant]]
+      -- print(x, pcs_illuminant_x, y, pcs_illuminant_y, z, pcs_illuminant_z)
+      return nil, [[Invalid illuminant]]
     end
   end
   info.creator = read_tag(f)
@@ -179,7 +178,7 @@ local function read_tags(f)
   for i = 1, count do
     local tag = read_tag(f)
     if tag_map[tag] then
-      error[[Duplicate tag]]
+      return nil, [[Duplicate tag]]
     end
     tag_map[tag] = {read_position_number(f)}
   end
@@ -238,7 +237,7 @@ local map_para_inverse = { [0] =
     return clip((value^(1/para[1])-para[3])/para[2])
   end,
   function(para, value)
-    if para[4] < 0 then error[[Invalid]] end
+    if para[4] < 0 then return nil end
     if value >= para[4]*para[5] then
       return clip((value^(1/para[1])-para[3])/para[2])
     else
@@ -246,7 +245,7 @@ local map_para_inverse = { [0] =
     end
   end,
   function(para, value)
-    if para[4] < 0 then error[[Invalid]] end
+    if para[4] < 0 then return nil end
     if value >= para[4]*para[5]+para[7] then
       return clip(((value-para[6])^(1/para[1])-para[3])/para[2])
     else
@@ -265,7 +264,9 @@ local function read_para(f)
                  or kind == 2 and 4
                  or kind == 3 and 5
                  or kind == 4 and 7
-                 or error"Unknown function type"
+  if not num_param then
+    return nil, "Unknown function type"
+  end
   local parameters = read_fixeds16table(f, num_param)
   parameters.kind = kind
   parameters.map = map_para[kind]
@@ -357,7 +358,7 @@ local function read_curve(f)
   elseif tag == 'curv' then
     return read_curv(f)
   else
-    error"Unknown curve type"
+    return nil, "Unknown curve type"
   end
 end
 
@@ -372,7 +373,9 @@ end
 local function map_curves_inverse(curves, values)
   assert(#curves == #values)
   for i=1, #curves do
-    values[i] = curves[i]:inverse(values[i])
+    local mapped, err = curves[i]:inverse(values[i])
+    if not mapped then return nil, err or "Curve does not support reverse mapping" end
+    values[i] = mapped
   end
   return values
 end
@@ -464,10 +467,10 @@ end
 
 local function map_pipeline(pipeline, values)
   for i=1, #pipeline do
-    print(pipeline, i, table.unpack(values))
-    values = pipeline[i]:map(values)
+    local err
+    values, err = pipeline[i]:map(values)
+    if not values then return nil, err end
   end
-  print(pipeline, '.', table.unpack(values))
   return values
 end
 
@@ -493,19 +496,31 @@ local function read_mABA(f, size, off0, tag, encode, decode)
   if b_off ~= 0 then
     setposition(f, off0 + b_off)
     b = {}
-    for i=1, b_channels do b[i] = read_curve(f) end
+    for i=1, b_channels do
+      local curve, err = read_curve(f)
+      if err then return nil, err end
+      b[i] = curve
+    end
     b.map = map_curves
   end
   if m_off ~= 0 then
     setposition(f, off0 + m_off)
     m = {}
-    for i=1, b_channels do m[i] = read_curve(f) end
+    for i=1, b_channels do
+      local curve, err = read_curve(f)
+      if err then return nil, err end
+      m[i] = curve
+    end
     m.map = map_curves
   end
   if a_off ~= 0 then
     setposition(f, off0 + a_off)
     a = {}
-    for i=1, a_channels do a[i] = read_curve(f) end
+    for i=1, a_channels do
+      local curve, err = read_curve(f)
+      if err then return nil, err end
+      a[i] = curve
+    end
     a.map = map_curves
   end
   if matrix_off ~= 0 then
@@ -604,10 +619,10 @@ local function read_mft(f, size, precision, tag, header)
   out_table.map = map_curves
 
   -- 52 = 4 + 4 + 4 + 9*4 + 2 + 2
-  assert(size ==
-      (precision == 1 and 48 or 52)
-    + precision * (in_channels*in_entries + #clut + out_channels*out_entries)
-  )
+  if size ~= (precision == 1 and 48 or 52)
+    + precision * (in_channels*in_entries + #clut + out_channels*out_entries) then
+    return nil, "Size mismatch"
+  end
 
   local mapping = {
     kind = "mft",
@@ -707,7 +722,9 @@ local read_mpet do
       skipposition(f, 4)
       local kind = readu16(f)
       skipposition(f, 2)
-      local parameters = readfloattable(f, assert(0 and 4 or 1 or 2 and 5))
+      local num = kind == 0 and 4 or kind == 1 or kind == 2 and 5
+      if not num then return nil, "Unknown function" end
+      local parameters = readfloattable(f, num)
       parameters.map = map_parf[kind]
       return parameters, parameters:map(next_break, prev_break, next_break)
     elseif tag == 'samf' then
@@ -718,7 +735,7 @@ local read_mpet do
       entries[0] = carry
       return entries, entries[count]
     else
-      error[[Unknown segment]]
+      return nil, "Unknown segment"
     end
   end
 
@@ -726,7 +743,9 @@ local read_mpet do
     cvst = function(f, size, offset)
       skipposition(f, 4)
       local channels = readu16(f)
-      assert(channels == readu16(f))
+      if channels ~= readu16(f) then
+        return nil, "Input and output channels of curve set must match"
+      end
       local positions, sizes = {}, {}
       for i=1, channels do
         positions[i], sizes[i] = read_position_number(f)
@@ -738,7 +757,9 @@ local read_mpet do
       }
       for i=1, channels do
         setposition(f, offset + positions[i])
-        assert(read_tag(f) == 'curf')
+        if read_tag(f) ~= 'curf' then
+          return nil, "Curve expected"
+        end
         skipposition(4)
         local num_segments = readu16(f)
         skipposition(2)
@@ -750,6 +771,7 @@ local read_mpet do
         local carry
         for j=1, num_segments do
           segments[j], carry = read_segment(f, carry, breakpoints[j-1], breakpoints[j])
+          if not segments[j] then return nil, carry end
         end
         curves[i] = segments
       end
@@ -759,7 +781,9 @@ local read_mpet do
       skipposition(f, 4)
       local in_channels = readu16(f)
       local out_channels = readu16(f)
-      assert(size == 12 + (in_channels+1)*out_channels*4)
+      if size ~= 12 + (in_channels+1)*out_channels*4 then
+        return nil, "Size mismatch"
+      end
       local matrix = readfloattable(f, (in_channels+1)*out_channels)
       matrix.in_channels = in_channels
       matrix.out_channels = out_channels
@@ -791,12 +815,19 @@ local read_mpet do
       if not reader then
         return -- Unsupported tag ~~> fall back to A2B/B2A
       end
-      steps[i] = reader(f, sizes[i], off, tag)
-      assert(steps[i].in_channels == channels)
-      channels = steps[i].out_channels
+      local step, err = reader(f, sizes[i], off, tag)
+      if not step then
+        return nil, err
+      elseif step.in_channels ~= channels then
+        return nil, "Unexpected input channel count"
+      end
+      steps[i] = step
+      channels = step.out_channels
     end
 
-    assert(channels == final_out_channels)
+    if final_out_channels ~= channels then
+      return nil, "Unexpected output channel count"
+    end
     return mapping
   end
 end
@@ -814,7 +845,7 @@ local tag_readers = {
   curv = read_curv,
   para = read_para,
   sig  = function(f) skipposition(f, 4) return read_tag(f) end,
-  sf32 = function(f, size) skipposition(f, 4) assert(size % 4 == 0) return read_fixeds16table(f, size/4 - 2) end,
+  sf32 = function(f, size) skipposition(f, 4) if size % 4 == 0 then return read_fixeds16table(f, size/4 - 2) end end,
   XYZ  = function(f, size)
     skipposition(f, 4)
     local entries = {}
@@ -845,16 +876,21 @@ local function inv_matrix(M)
 end
 
 local function synthesize_matrix_transforms(profile)
-  if profile.A2B0 or profile.B2A0 then return end
+  if profile.A2B0 or profile.B2A0 then return profile end
   if profile.rTRC or profile.gTRC or profile.bTRC then
-    assert(profile.header.colorspace_pcs == 'XYZ')
+    if profile.header.colorspace_pcs ~= 'XYZ' then
+      return nil, "Matrix transforms require PCSXYZ"
+    end
+    if not (profile.rTRC and profile.gTRC and profile.bTRC and profile.rXYZ and profile.gTRC and profile.bTRC) then
+      return nil, "Required tag for matrix transform missing"
+    end
     local curves = {
-      assert(profile.rTRC), assert(profile.gTRC), assert(profile.bTRC),
+      profile.rTRC, profile.gTRC, profile.bTRC,
       map = map_curves,
     }
     local matrix = {map = map_matrix}
-    local rXYZ, gXYZ, bXYZ = assert(profile.rXYZ)[1],
-        assert(profile.gXYZ)[1], assert(profile.bXYZ)[1]
+    local rXYZ, gXYZ, bXYZ = profile.rXYZ[1],
+        profile.gXYZ[1], profile.bXYZ[1]
     matrix[1], matrix[2], matrix[3] = rXYZ[1], gXYZ[1], bXYZ[1]
     matrix[4], matrix[5], matrix[6] = rXYZ[2], gXYZ[2], bXYZ[2]
     matrix[7], matrix[8], matrix[9] = rXYZ[3], gXYZ[3], bXYZ[3]
@@ -872,16 +908,19 @@ local function synthesize_matrix_transforms(profile)
       kind = "matrix/TRC",
       map = map_pipeline,
     }
+    return profile
   elseif profile.kTRC then
     error[[TODO]]
   else
-    error[[Unsupported]]
+    return nil, "Unsupported"
   end
 end
 
 local function read_profile(f)
-  local header = read_header(f)
-  local tags = read_tags(f, header.size)
+  local header, err = read_header(f)
+  if not header then return nil, err end
+  local tags tags, err = read_tags(f, header.size)
+  if not tags then return nil, err end
   local profile = {header = header}
   for tag, position in next, tags do
     local offset, length = position[1], position[2]
@@ -889,17 +928,18 @@ local function read_profile(f)
     local data_type = read_tag(f)
     local reader = tag_readers[data_type]
     if reader then
-      profile[tag] = reader(f, length, offset, tag, profile)
-    else
-      print(string.format("Skipping %q since no reader for %q is available", tag, data_type))
+      local tag_data tag_data, err = reader(f, length, offset, tag, profile)
+      if not tag_data then return nil, err end
+      profile[tag] = tag_data
+    -- else
+    --   print(string.format("Skipping %q since no reader for %q is available", tag, data_type))
     end
   end
-  synthesize_matrix_transforms(profile)
-  return profile
+  return synthesize_matrix_transforms(profile)
 end
 
 local function map_values(profile, ...)
-  return table.unpack(profile:map{...})
+  return table.unpack(assert(profile:map{...}))
 end
 
 local xyz_to_lab, lab_to_xyz do
@@ -941,55 +981,57 @@ local function convert(profile1, profile2, values, intent)
   local mapping1 = profile1['A2B' .. (intent or 0)] or profile1['A2B0']
   local mapping2 = profile1['B2A' .. (intent or 0)] or profile1['B2A0']
   if (not mapping1) or (not mapping2) then
-    error[[Unsupported]]
+    return nil, "Requested conversion not supported by profiles"
   end
-  values = mapping1:map(values)
+  local err
+  values, err = mapping1:map(values)
+  if not values then return nil, err end
   if profile1.header.colorspace_pcs ~= profile2.header.colorspace_pcs then
     if profile1.header.colorspace_pcs == 'Lab' and profile2.header.colorspace_pcs == 'XYZ' then
       values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
     elseif profile1.header.colorspace_pcs == 'XYZ' and profile2.header.colorspace_pcs == 'Lab' then
       values[1], values[2], values[3] = xyz_to_lab(values[1], values[2], values[3])
     else
-      error[[Unsupported]]
+      return nil, "Unsupported"
     end
   end
 end
-local interpolate do
+local interpolate, interpolate_polar do
   local function to_lab(profile, values, intent)
     values = table.move(values, 1, #values, 1, {})
     local mapping = profile['A2B' .. (intent or 0)] or profile['A2B0']
-    values = assert(mapping, 'Unsupported'):map(values)
+    if not mapping then return nil, "Unsupported" end
+    local err values, err = mapping:map(values)
+    if not values then return nil, err end
     if profile.header.colorspace_pcs == 'XYZ' then
       values[1], values[2], values[3] = xyz_to_lab(values[1], values[2], values[3])
-    else
-      -- print('XYZ', lab_to_xyz(values[1], values[2], values[3]))
-      assert(profile.header.colorspace_pcs == 'Lab', 'Unsupported')
+    elseif profile.header.colorspace_pcs ~= 'Lab' then
+      return nil, 'Unsupported'
     end
     return values
   end
   local function interp(target, intent, t, acc, profile, values, factor, ...)
-    if not factor then
-      if select('#', ...) == 0 then
-        factor = 1-t
-      else
-        error[[Missing factor]]
-      end
+    if not factor and select('#', ...) == 0 then
+      factor = 1-t
     end
-    values = to_lab(profile, values, intent)
+    local err
+    values, err = to_lab(profile, values, intent)
+    if not values then return nil, err end
     acc[1], acc[2], acc[3] =
         acc[1] + factor*values[1], acc[2] + factor*values[2], acc[3] + factor*values[3]
     t = t + factor
     if select('#', ...) == 0 then
       if t > 1.0001 or t < 0.999 then
-        error[[Factors do not add to unity]]
+        return nil, "Factors do not add to unity"
       end
       if target.header.colorspace_pcs == 'XYZ' then
         acc[1], acc[2], acc[3] = lab_to_xyz(acc[1], acc[2], acc[3])
-      else
-        assert(target.header.colorspace_pcs == 'Lab', 'Unsupported')
+      elseif target.header.colorspace_pcs ~= 'Lab' then
+        return nil, 'Unsupported'
       end
       local mapping = target['B2A' .. (intent or 0)] or target['B2A0']
-      return assert(mapping, 'Unsupported'):map(acc)
+      if not mapping then return nil, "Unsupported" end
+      return mapping:map(acc)
     end
     return interp(target, intent, t, acc, ...)
   end
@@ -1001,9 +1043,9 @@ end
 
 local function load_profile(filename)
   local f = io.open(filename, 'rb')
-  local profile = read_profile(f)
+  local profile, err = read_profile(f)
   f:close()
-  return profile
+  return profile, err
 end
 
 local input_components_lookup = {
