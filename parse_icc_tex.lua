@@ -48,9 +48,9 @@ function handler(id)
     end
   end
   local result = assert(parse_icc.interpolate(table.unpack(args)))
-  tex.sprint(-2, string.format("%.4f", result[1]))
+  tex.sprint(-2, string.format("%.6f", result[1]))
   for i=2, #result do
     tex.sprint(-2, delim)
-    tex.sprint(-2, string.format("%.4f", result[i]))
+    tex.sprint(-2, string.format("%.6f", result[i]))
   end
 end

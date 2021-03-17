@@ -288,7 +288,7 @@ local function map_curv(curv, value)
     end
     local val_int, val_float = math.modf(value * (points-1))
     if val_float > 0.000000001 then
-      return ((1-val_float)*curv[val_int+1] + val_float*curv[val_int+2])/((1<<(8*curv.precision))-1)
+      return ((1-val_float)*curv[val_int+1] + val_float*curv[val_int+2] + .5)//1/((1<<(8*curv.precision))-1)
     else -- The second case is not just slightly faster in easy cases,
          --it avoids an invalid lookup if value==1
       return curv[val_int+1]/((1<<(8*curv.precision))-1)
@@ -398,11 +398,11 @@ end
 local encode_lab, decode_lab do
   local factor = 0xFFFF/0x8000 -- This can be represented exactly in a float, in contrast to 1/factor
   encode_lab = { map = function(_, values)
-    values[1], values[2], values[3] = values[1]/100, (values[2]+128)/256, (values[3]+128)/256
+    values[1], values[2], values[3] = values[1]/100, (values[2]+128)/255, (values[3]+128)/255
     return values
   end }
   decode_lab = { map = function(_, values)
-    values[1], values[2], values[3] = values[1]*100, values[2]*256 - 128, values[3]*256 - 128
+    values[1], values[2], values[3] = values[1]*100, values[2]*255 - 128, values[3]*255 - 128
     return values
   end }
 end
@@ -450,7 +450,7 @@ local function map_clut_recurse(clut, values, offset, stride, i)
   local mapped = map_clut_recurse(clut, values, offset + stride * val_int, stride * points, i-1)
   if val_float > 0.000000001 then
     local other_mapped = map_clut_recurse(clut, values, offset + stride * (val_int+1), stride * points, i-1)
-    mapped = (1-val_float)*mapped + val_float*other_mapped
+    mapped = ((1-val_float)*mapped + val_float*other_mapped + .5) // 1
   end
   return mapped
 end
@@ -632,8 +632,8 @@ local function read_mft(f, size, precision, tag, header)
     clut = clut,
     out_table = out_table,
     map = map_pipeline,
-    encode = encode == 'XYZ' and encode_xyz or encode == 'Lab' and encode_lab or nil,
-    decode = decode == 'XYZ' and decode_xyz or decode == 'Lab' and decode_lab or nil,
+    encode = encode == 'XYZ' and encode_xyz or encode == 'Lab' and (precision == 2 and encode_lab_legacy or encode_lab) or nil,
+    decode = decode == 'XYZ' and decode_xyz or decode == 'Lab' and (precision == 2 and decode_lab_legacy or decode_lab) or nil,
   }
   mapping[#mapping+1] = mapping.encode
   if matrix[1] ~= 1 or matrix[2] ~= 0 or matrix[3] ~= 0 or
