@@ -1039,6 +1039,40 @@ local interpolate, interpolate_polar do
     local values = {0, 0, 0}
     return interp(target, intent, 0, values, ...)
   end
+  local function Lab_to_HLC(Lab)
+    Lab[1], Lab[2], Lab[3] = math.atan(Lab[3], Lab[2]), Lab[1], math.sqrt(Lab[2]^2 + Lab[3]^2)
+    return Lab
+  end
+  local function HLC_to_Lab(HLC)
+    HLC[1], HLC[2], HLC[3] = HLC[2], HLC[3] * math.cos(HLC[1]), HLC[3] * math.sin(HLC[1])
+    return HLC
+  end
+  function interpolate_polar(target, intent, profile1, values1, factor, profile2, values2, inverse)
+    values1 = Lab_to_HLC(to_lab(profile1, values1, intent))
+    values2 = Lab_to_HLC(to_lab(profile2, values2, intent))
+    if values1[1] < values2[1] then
+      if (values2[1] - values1[1] > math.pi) == not inverse then
+        values1[1] = values1[1] + 2*math.pi
+      end
+    else
+      if (values1[1] - values2[1] > math.pi) == not inverse then
+        values2[1] = values2[1] + 2*math.pi
+      end
+    end
+    local values = HLC_to_Lab{
+      values1[1] * factor + values2[1] * (1-factor),
+      values1[2] * factor + values2[2] * (1-factor),
+      values1[3] * factor + values2[3] * (1-factor),
+    }
+    if target.header.colorspace_pcs == 'XYZ' then
+      values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
+    elseif target.header.colorspace_pcs ~= 'Lab' then
+      return nil, 'Unsupported'
+    end
+    local mapping = target['B2A' .. (intent or 0)] or target['B2A0']
+    if not mapping then return nil, "Unsupported" end
+    return mapping:map(values)
+  end
 end
 
 local function load_profile(filename)
@@ -1083,5 +1117,6 @@ return {
   load = load_profile,
   map = map_values,
   interpolate = interpolate,
+  interpolate_polar = interpolate_polar,
   input_components = input_components,
 }

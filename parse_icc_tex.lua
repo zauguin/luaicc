@@ -23,7 +23,10 @@ local spacer = token.command_id'spacer'
 function handler(id)
   local profile = assert(loaded_profiles[id])
   local delim = token.scan_keyword'delim' and token.get_next() or ' '
-  local num = token.scan_int()
+  local intent = token.scan_keyword'perceptual' and 0 or token.scan_keyword'colorimetric' and 1 or token.scan_keyword'saturation' and 2 or 0
+  local inverse = token.scan_keyword'inv_polar'
+  local polar = inverse or token.scan_keyword'polar'
+  local num = polar and 2 or token.scan_int()
   local args = {profile, 0}
   for i = 1, num do
     local t repeat
@@ -47,7 +50,13 @@ function handler(id)
       args[3*i+2] = factor
     end
   end
-  local result = assert(parse_icc.interpolate(table.unpack(args)))
+  local result
+  if polar then
+    args[#args+1] = inverse
+    result = assert(parse_icc.interpolate_polar(table.unpack(args)))
+  else
+    result = assert(parse_icc.interpolate(table.unpack(args)))
+  end
   tex.sprint(-2, string.format("%.6f", result[1]))
   for i=2, #result do
     tex.sprint(-2, delim)
