@@ -363,6 +363,10 @@ local function read_curve(f)
 end
 
 local function map_curves(curves, values)
+  -- if #curves ~= #values then
+  --   show{#curves, #values, values}
+  --   print(debug.traceback())
+  -- end
   assert(#curves == #values)
   for i=1, #curves do
     values[i] = curves[i]:map(values[i])
@@ -975,41 +979,93 @@ local xyz_to_lab, lab_to_xyz do
   end
 end
 
--- Convert can go through XYZ directly and therefore is faster when no Lab is involved.
-local function convert(profile1, profile2, values, intent)
-  values = table.move(values, 1, #values, 1, {})
-  local mapping1 = profile1['A2B' .. (intent or 0)] or profile1['A2B0']
-  local mapping2 = profile1['B2A' .. (intent or 0)] or profile1['B2A0']
-  if (not mapping1) or (not mapping2) then
-    return nil, "Requested conversion not supported by profiles"
-  end
-  local err
-  values, err = mapping1:map(values)
-  if not values then return nil, err end
-  if profile1.header.colorspace_pcs ~= profile2.header.colorspace_pcs then
-    if profile1.header.colorspace_pcs == 'Lab' and profile2.header.colorspace_pcs == 'XYZ' then
-      values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
-    elseif profile1.header.colorspace_pcs == 'XYZ' and profile2.header.colorspace_pcs == 'Lab' then
-      values[1], values[2], values[3] = xyz_to_lab(values[1], values[2], values[3])
-    else
-      return nil, "Unsupported"
+-- These functions will modify the values input table
+local from_lab, from_xyz do
+  local function from_pcs(profile, values, intent)
+    local mapping = profile['B2A' .. (intent or 0)] or profile['B2A0']
+    if not mapping then
+      return nil, "Requested conversion not supported by profiles"
     end
-  end
-end
-local interpolate, interpolate_polar do
-  local function to_lab(profile, values, intent)
-    values = table.move(values, 1, #values, 1, {})
-    local mapping = profile['A2B' .. (intent or 0)] or profile['A2B0']
-    if not mapping then return nil, "Unsupported" end
+    local gamut = profile.gamt
+    if gamut then
+      gamut = gamut:map{values[1], values[2], values[3]}
+      if gamut then
+        gamut = gamut[1] == 0
+      end
+    end
     local err values, err = mapping:map(values)
     if not values then return nil, err end
-    if profile.header.colorspace_pcs == 'XYZ' then
-      values[1], values[2], values[3] = xyz_to_lab(values[1], values[2], values[3])
-    elseif profile.header.colorspace_pcs ~= 'Lab' then
-      return nil, 'Unsupported'
-    end
-    return values
+    return values, gamut
   end
+
+  function from_lab(profile, values, intent)
+    local pcs = profile.header.colorspace_pcs
+    if pcs == 'XYZ' then
+      values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
+    elseif pcs ~= 'Lab' then
+      return nil, "Unexpected PCS"
+    end
+    return from_pcs(profile, values, intent)
+  end
+
+  function from_xyz(profile, values, intent)
+    local pcs = profile.header.colorspace_pcs
+    if pcs == 'Lab' then
+      values[1], values[2], values[3] = xyz_to_lab(values[1], values[2], values[3])
+    elseif pcs ~= 'XYZ' then
+      return nil, "Unexpected PCS"
+    end
+    return from_pcs(profile, values, intent)
+  end
+end
+
+local function to_pcs(profile, values, intent)
+  values = table.move(values, 1, #values, 1, {})
+  local mapping = profile['A2B' .. (intent or 0)] or profile['A2B0']
+  if not mapping then
+    return nil, "Requested conversion not supported by profiles"
+  end
+  local err values, err = mapping:map(values)
+  if not values then return nil, err end
+  return values, profile.header.colorspace_pcs
+end
+
+local function to_lab(profile, values, intent)
+  local pcs values, pcs = to_pcs(profile, values, intent)
+  if not values then return nil, pcs end
+  if pcs == 'XYZ' then
+    values[1], values[2], values[3] = xyz_to_lab(values[1], values[2], values[3])
+  elseif pcs ~= 'Lab' then
+    return nil, "Unexpected PCS"
+  end
+  return values
+end
+
+local function to_xyz(profile, values, intent)
+  local pcs values, pcs = to_pcs(profile, values, intent)
+  if not values then return nil, pcs end
+  if pcs == 'Lab' then
+    values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
+  elseif pcs ~= 'XYZ' then
+    return nil, "Unexpected PCS"
+  end
+  return values
+end
+
+-- Convert can go through XYZ directly and therefore is faster when no Lab is involved.
+local function convert(profile1, profile2, values, intent)
+  local mapping1 = profile1['A2B' .. (intent or 0)] or profile1['A2B0']
+  local mapping2 = profile1['B2A' .. (intent or 0)] or profile1['B2A0']
+  local pcs values, pcs = to_pcs(profile1, values, intent)
+  if not values then return nil, pcs end
+  local converter = pcs == 'Lab' and from_lab or pcs == 'XYZ' and from_xyz
+  if not converter then
+    return nil, "Unexpected input PCS"
+  end
+  return converter(profile2, values, intent)
+end
+
+local interpolate do
   local function interp(target, intent, t, acc, profile, values, factor, ...)
     if not factor and select('#', ...) == 0 then
       factor = 1-t
@@ -1024,14 +1080,7 @@ local interpolate, interpolate_polar do
       if t > 1.0001 or t < 0.999 then
         return nil, "Factors do not add to unity"
       end
-      if target.header.colorspace_pcs == 'XYZ' then
-        acc[1], acc[2], acc[3] = lab_to_xyz(acc[1], acc[2], acc[3])
-      elseif target.header.colorspace_pcs ~= 'Lab' then
-        return nil, 'Unsupported'
-      end
-      local mapping = target['B2A' .. (intent or 0)] or target['B2A0']
-      if not mapping then return nil, "Unsupported" end
-      return mapping:map(acc)
+      return from_lab(target, acc, intent)
     end
     return interp(target, intent, t, acc, ...)
   end
@@ -1039,6 +1088,9 @@ local interpolate, interpolate_polar do
     local values = {0, 0, 0}
     return interp(target, intent, 0, values, ...)
   end
+end
+
+local interpolate_polar do
   local function Lab_to_HLC(Lab)
     Lab[1], Lab[2], Lab[3] = math.atan(Lab[3], Lab[2]), Lab[1], math.sqrt(Lab[2]^2 + Lab[3]^2)
     return Lab
@@ -1064,14 +1116,7 @@ local interpolate, interpolate_polar do
       values1[2] * factor + values2[2] * (1-factor),
       values1[3] * factor + values2[3] * (1-factor),
     }
-    if target.header.colorspace_pcs == 'XYZ' then
-      values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
-    elseif target.header.colorspace_pcs ~= 'Lab' then
-      return nil, 'Unsupported'
-    end
-    local mapping = target['B2A' .. (intent or 0)] or target['B2A0']
-    if not mapping then return nil, "Unsupported" end
-    return mapping:map(values)
+    return from_lab(target, values, intent)
   end
 end
 

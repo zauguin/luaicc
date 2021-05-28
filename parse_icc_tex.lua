@@ -15,6 +15,9 @@ functions[funcid] = function()
   token.set_lua(csname, profile_id)
   functions[profile_id] = handler
   loaded_profiles[profile_id] = profile
+  if profile.A2D0 then
+    print(require'inspect'(profile.A2D0))
+  end
 end
 
 local luacall = token.command_id'lua_expandable_call'
@@ -22,12 +25,14 @@ local relax = token.command_id'relax'
 local spacer = token.command_id'spacer'
 function handler(id)
   local profile = assert(loaded_profiles[id])
+  if token.scan_keyword'components' then return tex.write(parse_icc.input_components(profile)) end
   local delim = token.scan_keyword'delim' and token.get_next() or ' '
+  local out_of_gamut_tag = token.scan_keyword'gamut' and token.get_next()
   local intent = token.scan_keyword'perceptual' and 0 or token.scan_keyword'colorimetric' and 1 or token.scan_keyword'saturation' and 2 or 0
   local inverse = token.scan_keyword'inv_polar'
   local polar = inverse or token.scan_keyword'polar'
   local num = polar and 2 or token.scan_int()
-  local args = {profile, 0}
+  local args = {profile, intent}
   for i = 1, num do
     local t repeat
       t = token.get_next()
@@ -41,6 +46,7 @@ function handler(id)
     local num_components = assert(parse_icc.input_components(prof))
     for j = 1, num_components do
       components[j] = token.scan_real()
+      print(components[j])
     end
     local factor
     args[3*i] = prof
@@ -50,12 +56,22 @@ function handler(id)
       args[3*i+2] = factor
     end
   end
-  local result
+  local result, in_gamut
   if polar then
     args[#args+1] = inverse
-    result = assert(parse_icc.interpolate_polar(table.unpack(args)))
+    result, in_gamut = assert(parse_icc.interpolate_polar(table.unpack(args)))
   else
-    result = assert(parse_icc.interpolate(table.unpack(args)))
+    result, in_gamut = assert(parse_icc.interpolate(table.unpack(args)))
+  end
+  -- in_gamut has three possible values:
+  --  - nil: Indeterminate (No gamt tag or check failed)
+  --  - true: In gamut
+  --  - false: out of gamut
+  if in_gamut ~= nil then
+    print(out_of_gamut_tag, in_gamut)
+  end
+  if out_of_gamut_tag and in_gamut == false then
+    tex.sprint(out_of_gamut_tag)
   end
   tex.sprint(-2, string.format("%.6f", result[1]))
   for i=2, #result do
