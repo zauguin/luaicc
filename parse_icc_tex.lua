@@ -15,9 +15,6 @@ functions[funcid] = function()
   token.set_lua(csname, profile_id)
   functions[profile_id] = handler
   loaded_profiles[profile_id] = profile
-  if profile.A2D0 then
-    print(require'inspect'(profile.A2D0))
-  end
 end
 
 local luacall = token.command_id'lua_expandable_call'
@@ -46,7 +43,6 @@ function handler(id)
     local num_components = assert(parse_icc.input_components(prof))
     for j = 1, num_components do
       components[j] = token.scan_real()
-      print(components[j])
     end
     local factor
     args[3*i] = prof
@@ -67,9 +63,6 @@ function handler(id)
   --  - nil: Indeterminate (No gamt tag or check failed)
   --  - true: In gamut
   --  - false: out of gamut
-  if in_gamut ~= nil then
-    print(out_of_gamut_tag, in_gamut)
-  end
   if out_of_gamut_tag and in_gamut == false then
     tex.sprint(out_of_gamut_tag)
   end
