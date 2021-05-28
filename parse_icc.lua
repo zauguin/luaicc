@@ -1121,7 +1121,7 @@ local interpolate_polar do
 end
 
 local function load_profile(filename)
-  local f = io.open(filename, 'rb')
+  local f = assert(io.open(filename, 'rb'))
   local profile, err = read_profile(f)
   f:close()
   return profile, err

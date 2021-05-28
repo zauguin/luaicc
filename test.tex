@@ -4,15 +4,14 @@
 \documentclass{article}
 \directlua{require'parse_icc_tex'}
 \begin{document}
-\LoadProfile\sRGB{/home/marcel/Downloads/sRGB_v4_ICC_preference.icc}
-\LoadProfile\sGRB{/usr/share/color/icc/colord/SwappedRedAndGreen.icc}
+\LoadProfile\sRGB{sRGB_v4_ICC_preference.icc}
+\LoadProfile\sGRB{SwappedRedAndGreen.icc}
 \LoadProfile\SRGB{sRGB.icc}
 \LoadProfile\fogra{FOGRA39L_coated.icc}
 \ExplSyntaxOn
-\color_model_new:nnn{srgb}{ICCBased}{file=/home/marcel/Downloads/sRGB_v4_ICC_preference.icc}
-\color_model_new:nnn{sgrb}{ICCBased}{file=/usr/share/color/icc/colord/SwappedRedAndGreen.icc}
+\color_model_new:nnn{srgb}{ICCBased}{file=sRGB_v4_ICC_preference.icc}
+\color_model_new:nnn{sgrb}{ICCBased}{file=SwappedRedAndGreen.icc}
 \color_model_new:nnn{fogra}{ICCBased}{file=FOGRA39L_coated.icc}
-\LoadProfile\sRGB{/home/marcel/Downloads/sRGB_v4_ICC_preference.icc}
 \tl_set:No \l_tmpa_tl {\fogra delim, 1~\sRGB 1~1~1}
 \tl_show:N\l_tmpa_tl
 \tl_set:No \l_tmpa_tl {\fogra delim, 1~\sRGB 0~0~0}
