@@ -3,62 +3,77 @@ local parse_icc = require'parse_icc'
 local loaded_profiles = {}
 local functions = lua.get_functions_table()
 
+local luacall = token.command_id'lua_call'
+local relax = token.command_id'relax'
+local spacer = token.command_id'spacer'
+
+local handler
+
+local function scan_profile()
+  local t
+  repeat
+    t = token.scan_token()
+  until t.command ~= relax and t.command ~= spacer
+  local index = t.index
+  if t.command ~= luacall or functions[index] ~= handler then
+    error[[Profile expected]]
+  end
+  return loaded_profiles[index]
+end
+
+
 local funcid = luatexbase.new_luafunction'LoadProfile'
 token.set_lua('LoadProfile', funcid, 'global', 'protected')
-local handler
 functions[funcid] = function()
   token.put_next(token.create'noexpand')
   local csname = token.scan_token().csname
   local filename = token.scan_argument()
   local profile = assert(parse_icc.load(kpse.find_file(filename)))
   local profile_id = luatexbase.new_luafunction('Lua loaded colorprofile ' .. filename)
-  token.set_lua(csname, profile_id)
+  token.set_lua(csname, profile_id, 'protected')
   functions[profile_id] = handler
   loaded_profiles[profile_id] = profile
 end
 
-local luacall = token.command_id'lua_expandable_call'
-local relax = token.command_id'relax'
-local spacer = token.command_id'spacer'
-function handler(id)
-  local profile = assert(loaded_profiles[id])
-  if token.scan_keyword'components' then return tex.write(parse_icc.input_components(profile)) end
+funcid = luatexbase.new_luafunction'ApplyProfile'
+token.set_lua('ApplyProfile', funcid, 'global')
+functions[funcid] = function()
   local delim = token.scan_keyword'delim' and token.get_next() or ' '
   local out_of_gamut_tag = token.scan_keyword'gamut' and token.get_next()
   local intent = token.scan_keyword'perceptual' and 0 or token.scan_keyword'colorimetric' and 1 or token.scan_keyword'saturation' and 2 or 0
-  local inverse = token.scan_keyword'inv_polar'
-  local polar = inverse or token.scan_keyword'polar'
-  local num = polar and 2 or token.scan_int()
+  local polar = token.scan_keyword'lchuv' and parse_icc.interpolate_lchuv or token.scan_keyword'lch' and parse_icc.interpolate_lch
+  local inverse = polar and token.scan_keyword'inverse'
+  local interpolate = polar or token.scan_keyword'lab' and parse_icc.interpolate_lab or token.scan_keyword'luv' and parse_icc.interpolate_luv or token.scan_keyword'xyz' and parse_icc.interpolate_xyz or token.scan_keyword'xyy' and parse_icc.interpolate_xyY or parse_icc.interpolate_lab
+  local profile = scan_profile()
+  local num = token.scan_int()
+  if num < 1 then
+    tex.error'Invalid number of color components'
+    return
+  elseif num == 1 then
+    interpolate, polar = parse_icc.convert, nil
+  elseif polar and num > 2 then
+    tex.error'Unable to interpolate more than two colors in polar space'
+    return
+  end
   local args = {profile, intent}
   for i = 1, num do
-    local t repeat
-      t = token.get_next()
-    until t.command ~= relax and t.command ~= spacer
-    local index = t.index
-    if t.command ~= luacall or functions[index] ~= handler then
-      error[[Profile expected]]
-    end
-    local prof = loaded_profiles[index]
+    local prof = scan_profile()
     local components = {}
     local num_components = assert(parse_icc.input_components(prof))
     for j = 1, num_components do
       components[j] = token.scan_real()
     end
-    local factor
     args[3*i] = prof
     args[3*i+1] = components
     if i ~= num then
-      factor = token.scan_int()/1000
-      args[3*i+2] = factor
+      args[3*i+2] = token.scan_int()/1000
     end
   end
   local result, in_gamut
   if polar then
     args[#args+1] = inverse
-    result, in_gamut = assert(parse_icc.interpolate_polar(table.unpack(args)))
-  else
-    result, in_gamut = assert(parse_icc.interpolate(table.unpack(args)))
   end
+  result, in_gamut = assert(interpolate(table.unpack(args)))
   -- in_gamut has three possible values:
   --  - nil: Indeterminate (No gamt tag or check failed)
   --  - true: In gamut
@@ -71,4 +86,22 @@ function handler(id)
     tex.sprint(-2, delim)
     tex.sprint(-2, string.format("%.6f", result[i]))
   end
+end
+
+funcid = luatexbase.new_luafunction'ProfileInfo'
+token.set_lua('ProfileInfo', funcid, 'global')
+functions[funcid] = function()
+  if token.scan_keyword'components' then
+    local profile = scan_profile()
+    return tex.write(parse_icc.input_components(profile))
+  end
+  tex.error('Unsupported argument ' .. token.scan_word() .. ' supplied to \\ProfileInfo')
+end
+
+function handler()
+  tex.error('Color profile identifier misused', {
+      'Color profile commands initialized with \\LoadProfile can not be \z
+      used on their own but can only be used as arguments \z
+      for \\ApplyProfile or \\ProfileInfo.'
+  })
 end

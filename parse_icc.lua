@@ -885,7 +885,7 @@ local function synthesize_matrix_transforms(profile)
     if profile.header.colorspace_pcs ~= 'XYZ' then
       return nil, "Matrix transforms require PCSXYZ"
     end
-    if not (profile.rTRC and profile.gTRC and profile.bTRC and profile.rXYZ and profile.gTRC and profile.bTRC) then
+    if not (profile.rTRC and profile.gTRC and profile.bTRC and profile.rXYZ and profile.gXYZ and profile.bXYZ) then
       return nil, "Required tag for matrix transform missing"
     end
     local curves = {
@@ -943,7 +943,9 @@ local function read_profile(f)
 end
 
 local function map_values(profile, ...)
-  return table.unpack(assert(profile:map{...}))
+  local mapped, msg = profile:map{...}
+  if not mapped then return mapped, msg end
+  return table.unpack(mapped)
 end
 
 local xyz_to_lab, lab_to_xyz do
@@ -976,6 +978,54 @@ local xyz_to_lab, lab_to_xyz do
   function lab_to_xyz(L, a, b)
     L = (L+16)/116
     return x_n*f_inv(L+a/500), y_n*f_inv(L), z_n*f_inv(L-b/200)
+  end
+end
+
+local xyz_to_luv, luv_to_xyz do
+  local delta = 6/29
+  local delta_cube = delta^3
+  local factor_inv = delta_cube/8
+  local factor = 1/factor_inv
+
+  local x_n, y_n, z_n = 0.9642, 1, 0.8249
+  local u_n, v_n = 4*x_n / (x_n + 15*y_n + 3*z_n), 9*y_n / (x_n + 15*y_n + 3*z_n)
+
+  function xyz_to_luv(x, y, z)
+    local div = x + 15*y + 3*z
+    local u, v = 4*x / div, 9*y / div
+    
+    L, u, v = y/y_n, u-u_n, v-v_n
+    if L > delta_cube then
+      L = 116 * L^(1/3) - 16
+    else
+      L = factor * L
+    end
+    local L13 = 13 * L
+    return L, L13 * u, L13 * v
+  end
+
+  function luv_to_xyz(L, u, v)
+    local L13 = 13 * L
+    u, v = u/L13 + u_n, v/L13 + v_n
+    if L > 8 then
+      L = ((L+16)/116)^3
+    else
+      L = L * factor_inv
+    end
+    L = y_n * L
+    return L * (9*u) / (4*v), L, L * (12-3*u-20*v)/(4*v)
+  end
+end
+
+local xyz_to_xyY, xyY_to_xyz do
+  function xyz_to_xyY(x, y, z)
+    local sum = x + y + z
+    return x / sum, y / sum, y
+  end
+
+  function xyY_to_xyz(x, y, Y)
+    local sum = Y / y
+    return x * sum, Y, (1 - x - y) * sum
   end
 end
 
@@ -1052,26 +1102,46 @@ local function to_xyz(profile, values, intent)
   return values
 end
 
+local function from_xyY(profile, values, intent)
+  values[1], values[2], values[3] = xyY_to_xyz(values[1], values[2], values[3])
+  return from_xyz(profile, values, intent)
+end
+
+local function to_xyY(profile, values, intent)
+  values = to_xyz(profile, values, intent)
+  values[1], values[2], values[3] = xyz_to_xyY(values[1], values[2], values[3])
+  return values
+end
+
+local function from_luv(profile, values, intent)
+  values[1], values[2], values[3] = luv_to_xyz(values[1], values[2], values[3])
+  return from_xyz(profile, values, intent)
+end
+
+local function to_luv(profile, values, intent)
+  values = to_xyz(profile, values, intent)
+  values[1], values[2], values[3] = xyz_to_luv(values[1], values[2], values[3])
+  return values
+end
+
 -- Convert can go through XYZ directly and therefore is faster when no Lab is involved.
-local function convert(profile1, profile2, values, intent)
-  local mapping1 = profile1['A2B' .. (intent or 0)] or profile1['A2B0']
-  local mapping2 = profile1['B2A' .. (intent or 0)] or profile1['B2A0']
-  local pcs values, pcs = to_pcs(profile1, values, intent)
+local function convert(target, intent, source, values)
+  local pcs values, pcs = to_pcs(source, values, intent)
   if not values then return nil, pcs end
   local converter = pcs == 'Lab' and from_lab or pcs == 'XYZ' and from_xyz
   if not converter then
     return nil, "Unexpected input PCS"
   end
-  return converter(profile2, values, intent)
+  return converter(target, values, intent)
 end
 
-local interpolate do
+local function interpolate(from_space, to_space)
   local function interp(target, intent, t, acc, profile, values, factor, ...)
     if not factor and select('#', ...) == 0 then
       factor = 1-t
     end
     local err
-    values, err = to_lab(profile, values, intent)
+    values, err = to_space(profile, values, intent)
     if not values then return nil, err end
     acc[1], acc[2], acc[3] =
         acc[1] + factor*values[1], acc[2] + factor*values[2], acc[3] + factor*values[3]
@@ -1080,48 +1150,51 @@ local interpolate do
       if t > 1.0001 or t < 0.999 then
         return nil, "Factors do not add to unity"
       end
-      return from_lab(target, acc, intent)
+      return from_space(target, acc, intent)
     end
     return interp(target, intent, t, acc, ...)
   end
-  function interpolate(target, intent, ...)
+  return function(target, intent, ...)
     local values = {0, 0, 0}
     return interp(target, intent, 0, values, ...)
   end
 end
 
 local interpolate_polar do
-  local function Lab_to_HLC(Lab)
-    Lab[1], Lab[2], Lab[3] = math.atan(Lab[3], Lab[2]), Lab[1], math.sqrt(Lab[2]^2 + Lab[3]^2)
-    return Lab
+  local function to_polar(abc)
+    abc[2], abc[3] = math.sqrt(abc[2]^2 + abc[3]^2), math.atan(abc[3], abc[2])
+    return abc
   end
-  local function HLC_to_Lab(HLC)
-    HLC[1], HLC[2], HLC[3] = HLC[2], HLC[3] * math.cos(HLC[1]), HLC[3] * math.sin(HLC[1])
-    return HLC
+  local function from_polar(abc)
+    abc[2], abc[3] = abc[2] * math.cos(abc[3]), abc[2] * math.sin(abc[3])
+    return abc
   end
-  function interpolate_polar(target, intent, profile1, values1, factor, profile2, values2, inverse)
-    values1 = Lab_to_HLC(to_lab(profile1, values1, intent))
-    values2 = Lab_to_HLC(to_lab(profile2, values2, intent))
-    if values1[1] < values2[1] then
-      if (values2[1] - values1[1] > math.pi) == not inverse then
-        values1[1] = values1[1] + 2*math.pi
+  function interpolate_polar(from_space, to_space)
+    return function(target, intent, profile1, values1, factor, profile2, values2, inverse)
+      values1 = to_polar(to_space(profile1, values1, intent))
+      values2 = to_polar(to_space(profile2, values2, intent))
+      if values1[3] < values2[3] then
+        if (values2[3] - values1[3] > math.pi) == not inverse then
+          values1[3] = values1[3] + 2*math.pi
+        end
+      else
+        if (values1[3] - values2[3] > math.pi) == not inverse then
+          values2[3] = values2[3] + 2*math.pi
+        end
       end
-    else
-      if (values1[1] - values2[1] > math.pi) == not inverse then
-        values2[1] = values2[1] + 2*math.pi
-      end
+      local values = from_polar{
+        values1[1] * factor + values2[1] * (1-factor),
+        values1[2] * factor + values2[2] * (1-factor),
+        values1[3] * factor + values2[3] * (1-factor),
+      }
+      return from_space(target, values, intent)
     end
-    local values = HLC_to_Lab{
-      values1[1] * factor + values2[1] * (1-factor),
-      values1[2] * factor + values2[2] * (1-factor),
-      values1[3] * factor + values2[3] * (1-factor),
-    }
-    return from_lab(target, values, intent)
   end
 end
 
 local function load_profile(filename)
-  local f = assert(io.open(filename, 'rb'))
+  local f, msg = io.open(filename, 'rb')
+  if not f then return f, msg end
   local profile, err = read_profile(f)
   f:close()
   return profile, err
@@ -1161,7 +1234,12 @@ end
 return {
   load = load_profile,
   map = map_values,
-  interpolate = interpolate,
-  interpolate_polar = interpolate_polar,
+  convert = convert,
+  interpolate_lab = interpolate(from_lab, to_lab),
+  interpolate_xyz = interpolate(from_xyz, to_xyz),
+  interpolate_xyY = interpolate(from_xyY, to_xyY),
+  interpolate_luv = interpolate(from_luv, to_luv),
+  interpolate_lch = interpolate_polar(from_lab, to_lab),
+  interpolate_lchuv = interpolate_polar(from_luv, to_luv),
   input_components = input_components,
 }
