@@ -1,220 +1,73 @@
 \RequirePackage{pdfmanagement-testphase}
-\DeclareDocumentMetadata{}
-\pdfvariable compresslevel0
+\DeclareDocumentMetadata{uncompress}
 \documentclass{article}
 \usepackage{array}
 \directlua{require'parse_icc_tex'}
 \begin{document}
 \ExplSyntaxOn
-\cs_set_protected:Npn \__color_convert:nnnN #1#2#3#4
+\group_begin:
+\cs_set:Npn \__my_tmp:n #1
   {
-    \tl_set:Nx #4
+    \cs_set_protected:Npn \__color_convert:nnnN ##1##2##3##4
       {
         \bool_if:nTF
           {
-            \cs_if_exist_p:c { l__color_ #1 _profile }
+            \cs_if_exist_p:c { l__color_ ##1 _profile }
             &&
-            \cs_if_exist_p:c { l__color_ #2 _profile }
+            \cs_if_exist_p:c { l__color_ ##2 _profile }
           }
           {
-            \ApplyProfile \use:c { l__color_ #2 _profile } 1 \use:c { l__color_ #1 _profile } #3
+            \tl_set:Nx ##4
+              {
+                \ApplyProfile \use:c { l__color_ ##2 _profile } 1 \use:c { l__color_ ##1 _profile } ##3
+              }
           }
           {
-            \cs_if_exist:cTF { __color_convert_ #1 _ #2 :w }
-              { \use:c { __color_convert_ #1 _ #2 :w } #3 ~ 0 ~ 0 ~ 0 \s__color_stop }
-              { \use:c { c__color_fallback_ #2 _tl } }
+            #1
           }
       }
   }
-\LoadProfile \l__color_cmyk_profile {FOGRA39L_coated.icc}
-\LoadProfile \l__color_srgb_profile {sRGB.icc}
-\ExplSyntaxOff
-% \LoadProfile\SRGB{sRGB_v4_ICC_preference.icc}
-\LoadProfile\sGRB{SwappedRedAndGreen.icc}
-\LoadProfile\sRGB{sRGB.icc}
-\LoadProfile\fogra{FOGRA39L_coated.icc}
-\ExplSyntaxOn
+\exp_last_unbraced:Nf \group_end: { \exp_args:No \__my_tmp:n { \__color_convert:nnnN {#1}{#2}{#3}{#4} } }
+\group_begin:
+\cs_set:Npn \__my_tmp:n #1
+  {
+    \cs_set_protected:Npn \color_profile_apply:nn ##1##2
+      {
+        #1
+        \exp_args:Nc \LoadProfile { l__color_ ##2 _profile } {##1}
+      }
+  }
+\exp_last_unbraced:Nf \group_end: { \exp_args:No \__my_tmp:n { \color_profile_apply:nn {#1}{#2} } }
+\group_begin:
+\cs_set:Npn \__my_tmp:n #1
+  {
+    \cs_set_protected:Npn \__color_model_iccbased:nn ##1##2
+      {
+        #1
+        \exp_args:Nc \LoadProfile { l__color_ ##2 _profile } {##1}
+      }
+  }
+\exp_last_unbraced:Nf \group_end: { \exp_args:No \__my_tmp:n { \__color_model_iccbased:nn {#1}{#2} } }
+
+\color_profile_apply:nn {FOGRA39L_coated.icc} {cmyk}
 \color_model_new:nnn{srgb}{ICCBased}{file=sRGB.icc}
 \color_model_new:nnn{sgrb}{ICCBased}{file=SwappedRedAndGreen.icc}
-\color_model_new:nnn{fogra}{ICCBased}{file=FOGRA39L_coated.icc}
-\color_set:nnn{BLK}{srgb}{0, 0, 0}
 \cs_generate_variant:Nn \color_select:nn { nf }
 \cs_new_eq:NN \colorselect \color_select:nf
-\cs_new_eq:NN \colorselectN \color_select:n
+\cs_new_protected:Npn \selectmodel { \tl_set:Nn \l_color_fixed_model_tl }
 \cs_new:Npn \iterate { \int_step_inline:nnn {0} {1000} }
 \ExplSyntaxOff
-Test: \begingroup
-  \colorselect{rgb}{\ApplyProfile delim, \sRGB 1 \fogra 0.9 0.1 0.1 0 }%
-  \vrule width 5em
-  \colorselect{srgb}{\ApplyProfile delim, \sRGB 1 \fogra 0.9 0.1 0.1 0 }%
-  \vrule width 5em
-  \colorselect{fogra}{0.9,0.1,0.1,0}%
-  \vrule width 5em
+Test:
+  \selectmodel {rgb}%
   \colorselect{cmyk}{0.9,0.1,0.1,0}%
   \vrule width 5em
-  \expandafter\def\csname l_color_fixed_model_tl\endcsname{rgb}%
+  \selectmodel {srgb}%
   \colorselect{cmyk}{0.9,0.1,0.1,0}%
   \vrule width 5em
-\endgroup
-
-\colorselect{srgb}{\ApplyProfile delim, \sRGB 1 \fogra 0.9 0.1 0.1 0 }
-\begin{tabular}{ll}
-  sRGB black --- fogra cyan (in sRGB)&\iterate{
-    \colorselectN{BLK!#1/10!cyan}\vrule width .1pt
-  }\\
-  red --- cyan&\iterate{
-    \colorselectN{red!#1/10!cyan}\vrule width .1pt
-  }\\
-  sRGB red --- sRGB cyan&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lab \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 1  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB cyan (XYZ)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyz \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 1  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB cyan (xyY)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyY \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 1  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB cyan (Luv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 1  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB cyan (LCh)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lch \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 1  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB green&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lab \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB green (XYZ)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyz \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB green (xyY)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyY \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB green (Luv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB green (LCh)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lch \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB green (LChuv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lchuv \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB green (LCh inverse)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lch inverse \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB green (LChuv inverse)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lchuv inverse \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB green (LCh)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lch \sRGB 2 \sRGB 0 .8 0 #1 \sRGB 0 .8 0  }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB green (LChuv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lchuv \sRGB 2 \sRGB 0 .8 0 #1 \sRGB 0 .8 0  }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB green (LCh inverse)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lch inverse \sRGB 2 \sRGB 0 .8 0 #1 \sRGB 0 .8 0  }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB green (LChuv inverse)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lchuv inverse \sRGB 2 \sRGB 0 .8 0 #1 \sRGB 0 .8 0  }\vrule width .1pt
-  }\\
-  green --- red&\iterate{
-    \colorselectN{green!#1/10!red}\vrule width .1pt
-  }\\
-  sRGB green --- sRGB red&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lab \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB red (XYZ)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyz \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB red (xyY)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyY \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB red (Luv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB red (LCh)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lch \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB red (LChuv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lchuv \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
-  }\\
-  blue --- red&\iterate{
-    \colorselectN{blue!#1/10!red}\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB red&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lab \sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 0 0  }\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB red (XYZ)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyz\sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 0 0  }\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB red (xyY)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyY\sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 0 0  }\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB red (Luv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, luv\sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 0 0  }\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB red (LCh)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lch \sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 0 0  }\vrule width .1pt
-  }\\
-  red --- white&\iterate{
-    \colorselectN{red!#1/10!white}\vrule width .1pt
-  }\\
-  sRGB red --- sRGB white&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lab \sRGB 2 \sRGB 1 0 0 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB white (XYZ)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyz \sRGB 2 \sRGB 1 0 0 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB white (xyY)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyY \sRGB 2 \sRGB 1 0 0 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB red --- sRGB white (Luv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 1 0 0 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  green --- white&\iterate{
-    \colorselectN{green!#1/10!white}\vrule width .1pt
-  }\\
-  sRGB green --- sRGB white&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lab \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB white (XYZ)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyz \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB white (xyY)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyY \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB white (Luv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  blue --- white&\iterate{
-    \colorselectN{blue!#1/10!white}\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB white&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lab \sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB white (XYZ)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyz \sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB white (xyY)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, xyY \sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB white (Luv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  \gdef \gamutmark #1,#2,#3,#4{0.0,1.0,0.0,0.0}
-  sRGB blue --- sRGB white (in fogra)&\iterate{
-    \colorselect{fogra}{\ApplyProfile delim, gamut\gamutmark \fogra 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB white (in fogra)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, \sRGB 1 \fogra \ApplyProfile \fogra 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB white (in fogra, colorimetric)6x&\iterate{
-    \colorselect{fogra}{\ApplyProfile delim, colorimetric \fogra 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-  sRGB blue --- sRGB white (in fogra converted to sRGB, colorimetric)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, colorimetric \sRGB 1 \fogra \ApplyProfile colorimetric \fogra 2 \sRGB 0 0 1 #1 \sRGB 1 1 1 }\vrule width .1pt
-  }\\
-  sRGB black --- sRGB white (in fogra converted to sRGB, colorimetric)&\iterate{
-    \colorselect{fogra}{\ApplyProfile delim, gamut\gamutmark \fogra 1 \sRGB \ApplyProfile colorimetric \sRGB 1 \fogra \ApplyProfile colorimetric \fogra 2 \sRGB 0 0 0 #1 \sRGB 1 1 1  }\vrule width .1pt
-  }\\
-\end{tabular}
+  \selectmodel {sgrb}%
+  \colorselect{cmyk}{0.9,0.1,0.1,0}%
+  \vrule width 5em
+  \selectmodel {cmyk}%
+  \colorselect{cmyk}{0.9,0.1,0.1,0}%
+  \vrule width 5em
 \end{document}
