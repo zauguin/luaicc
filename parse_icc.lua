@@ -654,7 +654,7 @@ end
 
 local read_mpet do
   local function readfloattable(f, count)
-    local t = {string.unpack(f:read(4*count), string.rep("f", count))}
+    local t = {string.unpack('>' .. string.rep("f", count), f:read(4*count))}
     t[#t] = nil -- Remove final offset
     assert(#t == count) -- TODO: Drop after testing
     return t
@@ -730,7 +730,7 @@ local read_mpet do
       if not num then return nil, "Unknown function" end
       local parameters = readfloattable(f, num)
       parameters.map = map_parf[kind]
-      return parameters, parameters:map(next_break, prev_break, next_break)
+      return parameters, next_break and parameters:map(next_break, prev_break, next_break)
     elseif tag == 'samf' then
       skipposition(f, 4)
       local count = readu32(f)
@@ -764,9 +764,9 @@ local read_mpet do
         if read_tag(f) ~= 'curf' then
           return nil, "Curve expected"
         end
-        skipposition(4)
+        skipposition(f, 4)
         local num_segments = readu16(f)
-        skipposition(2)
+        skipposition(f, 2)
         local breakpoints = readfloattable(f, num_segments-1)
         local segments = {
           map = map_curf,
@@ -803,7 +803,7 @@ local read_mpet do
     skipposition(f, 4)
     local channels = readu16(f)
     local final_out_channels = readu16(f)
-    local elements = readu16(f)
+    local elements = readu32(f)
     local positions, sizes = {}, {}
     for i=1, elements do
       positions[i], sizes[i] = read_position_number(f)
