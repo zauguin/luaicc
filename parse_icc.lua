@@ -660,6 +660,10 @@ local read_mpet do
     return t
   end
 
+  local function map_ident(_, values)
+    return values
+  end
+
   local function map_big_matrix(matrix, values)
     local val = {}
     local in_channels = matrix.in_channels
@@ -795,8 +799,32 @@ local read_mpet do
       return matrix
     end,
     clut = nil, -- TODO
-    bACS = nil, -- TODO
-    eACS = nil, -- TODO
+    bACS = function(f, size)
+      skipposition(f, 4)
+      local in_channels = readu16(f)
+      local out_channels = readu16(f)
+      if out_channels ~= in_channels then
+        return nil, "In/out channel mismatch in bACS"
+      end
+      return {
+        in_channels = in_channels,
+        out_channels = out_channels,
+        map = map_ident,
+      }
+    end,
+    eACS = function(f, size)
+      skipposition(f, 4)
+      local in_channels = readu16(f)
+      local out_channels = readu16(f)
+      if out_channels ~= in_channels then
+        return nil, "In/out channel mismatch in eACS"
+      end
+      return {
+        in_channels = in_channels,
+        out_channels = out_channels,
+        map = map_ident,
+      }
+    end,
   }
 
   function read_mpet(f, size, offset)
@@ -832,7 +860,7 @@ local read_mpet do
     if final_out_channels ~= channels then
       return nil, "Unexpected output channel count"
     end
-    return mapping
+    return steps
   end
 end
 
@@ -933,7 +961,7 @@ local function read_profile(f)
     local reader = tag_readers[data_type]
     if reader then
       local tag_data tag_data, err = reader(f, length, offset, tag, profile)
-      if not tag_data then return nil, err end
+      if not tag_data and err then return nil, err end -- read_mpet might return nil, nil. This is not an error but indicates that the tag should be ignored.
       profile[tag] = tag_data
     -- else
     --   print(string.format("Skipping %q since no reader for %q is available", tag, data_type))
