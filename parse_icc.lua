@@ -1232,7 +1232,7 @@ local function to_luv(profile, values, intent)
   return values
 end
 
--- Convert can go through XYZ directly and therefore is faster when no Lab is involved.
+-- Convert can go through any common PCS directly and therefore is sometimes faster
 local function convert(target, intent, source, values)
   local pcs values, pcs = to_pcs(source, values, intent)
   if not values then return nil, pcs end
@@ -1241,6 +1241,17 @@ local function convert(target, intent, source, values)
     return nil, "Unexpected input PCS"
   end
   return converter(target, values, intent)
+end
+
+local function apply_device_link(profile, values)
+  values = table.move(values, 1, #values, 1, {})
+  local mapping = profile.D2B0 or profile.A2B0
+  if not mapping then
+    return nil, "Requested conversion not supported by profiles"
+  end
+  local err values, err = mapping:map(values)
+  if not values then return nil, err end
+  return values
 end
 
 local function interpolate(from_space, to_space)
@@ -1338,11 +1349,15 @@ local input_components_lookup = {
 local function input_components(profile)
   return input_components_lookup[profile.header.colorspace_a]
 end
+local function profile_class(profile)
+  return profile.header.profile_class
+end
 
 return {
   load = load_profile,
   map = map_values,
   convert = convert,
+  apply_device_link = apply_device_link,
   interpolate_lab = interpolate(from_lab, to_lab),
   interpolate_xyz = interpolate(from_xyz, to_xyz),
   interpolate_xyY = interpolate(from_xyY, to_xyY),
@@ -1350,4 +1365,5 @@ return {
   interpolate_lch = interpolate_polar(from_lab, to_lab),
   interpolate_lchuv = interpolate_polar(from_luv, to_luv),
   input_components = input_components,
+  profile_class = profile_class,
 }

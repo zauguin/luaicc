@@ -45,7 +45,8 @@ functions[funcid] = function()
   local inverse = polar and token.scan_keyword'inverse'
   local interpolate = polar or token.scan_keyword'lab' and parse_icc.interpolate_lab or token.scan_keyword'luv' and parse_icc.interpolate_luv or token.scan_keyword'xyz' and parse_icc.interpolate_xyz or token.scan_keyword'xyy' and parse_icc.interpolate_xyY or parse_icc.interpolate_lab
   local profile = scan_profile()
-  local num = token.scan_int()
+  local is_device_link = parse_icc.profile_class(profile) == 'link'
+  local num = is_device_link and 1 or token.scan_int()
   if num < 1 then
     tex.error'Invalid number of color components'
     return
@@ -57,7 +58,7 @@ functions[funcid] = function()
   end
   local args = {profile, intent}
   for i = 1, num do
-    local prof = scan_profile()
+    local prof = is_device_link and profile or scan_profile()
     local components = {}
     local num_components = assert(parse_icc.input_components(prof))
     for j = 1, num_components do
@@ -73,7 +74,11 @@ functions[funcid] = function()
   if polar then
     args[#args+1] = inverse
   end
-  result, in_gamut = assert(interpolate(table.unpack(args)))
+  if is_device_link then
+    result, in_gamut = assert(parse_icc.apply_device_link(args[1], args[4]))
+  else
+    result, in_gamut = assert(interpolate(table.unpack(args)))
+  end
   -- in_gamut has three possible values:
   --  - nil: Indeterminate (No gamt tag or check failed)
   --  - true: In gamut
@@ -94,6 +99,9 @@ functions[funcid] = function()
   if token.scan_keyword'components' then
     local profile = scan_profile()
     return tex.write(parse_icc.input_components(profile))
+  elseif token.scan_keyword'class' then
+    local profile = scan_profile()
+    return tex.sprint(-2, parse_icc.profile_class(profile))
   end
   tex.error('Unsupported argument ' .. token.scan_word() .. ' supplied to \\ProfileInfo')
 end
