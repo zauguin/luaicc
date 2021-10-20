@@ -469,6 +469,36 @@ local function map_clut(clut, values)
   return result
 end
 
+local function map_clut_float_recurse(clut, values, offset, stride, i)
+  if i == 0 then return clut[offset] end
+  local points = clut.dimensions[i]
+  local value = values[i]
+  if value < 0 then
+    value = 0
+  elseif value > 1 then
+    value = 1
+  end
+  local val_int, val_float = math.modf(value * (points-1))
+  local mapped = map_clut_float_recurse(clut, values, offset + stride * val_int, stride * points, i-1)
+  if val_float > 0.000000001 then
+    local other_mapped = map_clut_float_recurse(clut, values, offset + stride * (val_int+1), stride * points, i-1)
+    mapped = (1-val_float)*mapped + val_float*other_mapped
+  end
+  return mapped
+end
+local function map_clut_float(clut, values)
+  local result = {}
+  local in_channels = #values
+  if in_channels ~= clut.in_channels then
+    error'Input channel mismatch'
+  end
+  local out_channels = clut.out_channels
+  for i=1, out_channels do
+    result[i] = map_clut_float_recurse(clut, values, i, out_channels, in_channels)
+  end
+  return result
+end
+
 local function map_pipeline(pipeline, values)
   for i=1, #pipeline do
     local err
@@ -798,7 +828,25 @@ local read_mpet do
       matrix.map = map_big_matrix
       return matrix
     end,
-    clut = nil, -- TODO
+    clut = function(f, size)
+      skipposition(f, 4)
+      local in_channels = readu16(f)
+      local out_channels = readu16(f)
+      local grid_points = readcardinaltable(f, 16, 1)
+      local total_points = out_channels
+      for i = 1, in_channels do
+        total_points = total_points * grid_points[i]
+      end
+      if size ~= 28 + 4 * total_points then
+        return nil, "Size mismatch"
+      end
+      local clut = readfloattable(f, total_points)
+      clut.dimensions = grid_points
+      clut.in_channels = in_channels
+      clut.out_channels = out_channels
+      clut.map = map_clut_float
+      return clut
+    end,
     bACS = function(f, size)
       skipposition(f, 4)
       local in_channels = readu16(f)
@@ -1060,7 +1108,7 @@ end
 -- These functions will modify the values input table
 local from_lab, from_xyz do
   local function from_pcs(profile, values, intent)
-    local mapping = profile['B2A' .. (intent or 0)] or profile['B2A0']
+    local mapping = profile['B2D' .. (intent or 0)] or profile['B2A' .. (intent or 0)] or profile['B2A0']
     if not mapping then
       return nil, "Requested conversion not supported by profiles"
     end
@@ -1099,7 +1147,7 @@ end
 
 local function to_pcs(profile, values, intent)
   values = table.move(values, 1, #values, 1, {})
-  local mapping = profile['A2B' .. (intent or 0)] or profile['A2B0']
+  local mapping = profile['D2B' .. (intent or 0)] or profile['A2B' .. (intent or 0)] or profile['A2B0']
   if not mapping then
     return nil, "Requested conversion not supported by profiles"
   end
