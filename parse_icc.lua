@@ -158,7 +158,7 @@ local function read_header(f)
   info.rendering_intent = readu32(f) & 0xFFFF
   do
     local x, y, z = read_xyz(f)
-    if x ~= pcs_illuminant_x or y ~= pcs_illuminant_y or z ~= pcs_illuminant_z then
+    if math.max(math.abs(x - pcs_illuminant_x), math.abs(y - pcs_illuminant_y), math.abs(z - pcs_illuminant_z)) > 0.001 then
       -- print(x, pcs_illuminant_x, y, pcs_illuminant_y, z, pcs_illuminant_z)
       return nil, [[Invalid illuminant]]
     end
