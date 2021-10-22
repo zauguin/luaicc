@@ -169,7 +169,6 @@ local function read_header(f)
     local x, y, z = read_xyz(f) -- PCS illuminant. Since we hve a specified default illuminant, there aren't many options here.
     -- We normally be equal to pcs_illuminant_..., but we don't complain for small variations.
     if math.max(math.abs(x - pcs_illuminant_x), math.abs(y - pcs_illuminant_y), math.abs(z - pcs_illuminant_z)) > 0.001 then
-      -- print(x, pcs_illuminant_x, y, pcs_illuminant_y, z, pcs_illuminant_z)
       return nil, [[Invalid illuminant]]
     end
   end
@@ -987,44 +986,95 @@ local function inv_matrix(M)
   return inv
 end
 
-local function synthesize_matrix_transforms(profile)
-  if profile.A2B0 or profile.B2A0 then return profile end
-  if profile.rTRC or profile.gTRC or profile.bTRC then
-    if profile.header.colorspace_pcs ~= 'XYZ' then
-      return nil, "Matrix transforms require PCSXYZ"
+local synthesize_matrix_transforms do
+  local function expand(base, values)
+    local value = values[1]
+    for i = 1, #base do
+      values[i] = value * base[i]
     end
-    if not (profile.rTRC and profile.gTRC and profile.bTRC and profile.rXYZ and profile.gXYZ and profile.bXYZ) then
-      return nil, "Required tag for matrix transform missing"
+    return values
+  end
+  local compress_Lab = { function(_, values)
+    values[1], values[2], values[3] = values[1]/100, nil, nil
+    return values
+  end }
+  local compress_XYZ = { map = function(_, values)
+    values[1], values[2], values[3] = values[2], nil, nil
+    return values
+  end }
+  function synthesize_matrix_transforms(profile)
+    if profile.A2B0 or profile.B2A0 then return profile end
+    if profile.rTRC or profile.gTRC or profile.bTRC then
+      if profile.header.colorspace_pcs ~= 'XYZ' then
+        return nil, "Matrix transforms require PCSXYZ"
+      end
+      if not (profile.rTRC and profile.gTRC and profile.bTRC and profile.rXYZ and profile.gXYZ and profile.bXYZ) then
+        return nil, "Required tag for matrix transform missing"
+      end
+      local curves = {
+        profile.rTRC, profile.gTRC, profile.bTRC,
+        map = map_curves,
+      }
+      local matrix = {map = map_matrix}
+      local rXYZ, gXYZ, bXYZ = profile.rXYZ[1],
+          profile.gXYZ[1], profile.bXYZ[1]
+      matrix[1], matrix[2], matrix[3] = rXYZ[1], gXYZ[1], bXYZ[1]
+      matrix[4], matrix[5], matrix[6] = rXYZ[2], gXYZ[2], bXYZ[2]
+      matrix[7], matrix[8], matrix[9] = rXYZ[3], gXYZ[3], bXYZ[3]
+      profile.A2B0 = {
+        curves, matrix,
+        kind = "matrix/TRC",
+        map = map_pipeline,
+      }
+      matrix = inv_matrix(matrix)
+      matrix.map = map_matrix
+      curves = table.move(curves, 1, 3, 1, {})
+      curves.map = map_curves_inverse
+      profile.B2A0 = {
+        matrix, curves,
+        kind = "matrix/TRC",
+        map = map_pipeline,
+      }
+      return profile
+    elseif profile.kTRC then
+      local pcs = profile.header.colorspace_pcs
+      if pcs ~= 'XYZ' and pcs ~= 'Lab' then
+        return nil, "Unexpected PCS"
+      end
+      local curves = {
+        profile.kTRC,
+        map = map_curves,
+      }
+      profile.A2B0 = {
+        {
+          profile.kTRC,
+          map = map_curves,
+        },
+        pcs == 'XYZ' and {
+          pcs_illuminant_x, pcs_illuminant_y, pcs_illuminant_z,
+          map = expand,
+        } or {
+          100, 0, 0,
+          map = expand,
+        },
+        kind = "kTRC",
+        map = map_pipeline,
+      }
+      curves = table.move(curves, 1, 3, 1, {})
+      curves.map = map_curves_inverse
+      profile.B2A0 = {
+        pcs == 'XYZ' and compress_XYZ or compress_Lab,
+        {
+          profile.kTRC,
+          map = map_curves_inverse,
+        },
+        kind = "kTRC",
+        map = map_pipeline,
+      }
+      return profile
+    else
+      return nil, "Unsupported"
     end
-    local curves = {
-      profile.rTRC, profile.gTRC, profile.bTRC,
-      map = map_curves,
-    }
-    local matrix = {map = map_matrix}
-    local rXYZ, gXYZ, bXYZ = profile.rXYZ[1],
-        profile.gXYZ[1], profile.bXYZ[1]
-    matrix[1], matrix[2], matrix[3] = rXYZ[1], gXYZ[1], bXYZ[1]
-    matrix[4], matrix[5], matrix[6] = rXYZ[2], gXYZ[2], bXYZ[2]
-    matrix[7], matrix[8], matrix[9] = rXYZ[3], gXYZ[3], bXYZ[3]
-    profile.A2B0 = {
-      curves, matrix,
-      kind = "matrix/TRC",
-      map = map_pipeline,
-    }
-    matrix = inv_matrix(matrix)
-    matrix.map = map_matrix
-    curves = table.move(curves, 1, 3, 1, {})
-    curves.map = map_curves_inverse
-    profile.B2A0 = {
-      matrix, curves,
-      kind = "matrix/TRC",
-      map = map_pipeline,
-    }
-    return profile
-  elseif profile.kTRC then
-    error[[TODO]]
-  else
-    return nil, "Unsupported"
   end
 end
 
