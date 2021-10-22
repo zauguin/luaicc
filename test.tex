@@ -49,25 +49,138 @@
   }
 \exp_last_unbraced:Nf \group_end: { \exp_args:No \__my_tmp:n { \__color_model_iccbased:nn {#1}{#2} } }
 
-\color_profile_apply:nn {FOGRA39L_coated.icc} {cmyk}
+% We don't actually use \color_profile_apply:nn in this document since we want to demonstrate the effect of applying color profiles
+% \color_profile_apply:nn {sRGB.icc} {rgb}
+% \color_profile_apply:nn {FOGRA39L_coated.icc} {cmyk}
+\color_model_new:nnn{fogra}{ICCBased}{file=FOGRA39L_coated.icc}
 \color_model_new:nnn{srgb}{ICCBased}{file=sRGB.icc}
-\color_model_new:nnn{sgrb}{ICCBased}{file=SwappedRedAndGreen.icc}
+\color_model_new:nnn{mygray}{ICCBased}{file=gGrey-invert.icc}
 \cs_generate_variant:Nn \color_select:nn { nf }
 \cs_new_eq:NN \colorselect \color_select:nf
 \cs_new_protected:Npn \selectmodel { \tl_set:Nn \l_color_fixed_model_tl }
-\cs_new:Npn \iterate { \int_step_inline:nnn {0} {1000} }
 \ExplSyntaxOff
-Test:
+\begingroup
+  \colorselect{mygray}{0}%
+  If you can read this then your PDF viewer does not respect color profiles. 
+  All other colors on this page are probably a bit off.
+  \par
+\endgroup
+
+As an example, let's look at CMYK (0.9, 0.1, 0.1, 0). In your device specific CMYK color space, it looks like this: {\colorselect{cmyk}{0.9,0.1,0.1,0}\vrule width 5em}
+Let's ask \LaTeX\ to convert it to RGB: {\selectmodel{rgb}\colorselect{cmyk}{0.9,0.1,0.1,0}\vrule width 5em}
+
+Since both colors are device specific, I can't know how similar these look on your system. But on most system, they aren't a good fit.
+
+Since device specific color are hard to reason about and conversion between them is ill-defined, let's switch to ICC profile based colors instead. For CMYK I'll use a FOGRA39 Coated profile which represents common conditions for offset printing in Europe. It prints our example color as {\colorselect{fogra}{0.9,0.1,0.1,0}\vrule width 5em}. For RGB I'll use the very common sRGB standard. It shows the automatic conversion from above as {\colorselect{srgb}{0.1,0.9,0.9}\vrule width 5em}.
+
+Now I know for certain that these two color look quite different, so we want to do better. If we convert between these two colorspaces while taking the profile into account, we get {\selectmodel{srgb}\colorselect{fogra}{0.9,0.1,0.1,0}\vrule width 5em}.
+
+To make these more comparable, we can look at all the color next to one another.
+
+\begin{tabular}{c|ccccc}
+  Colorspace & Device RGB & sRGB & sRGB & Fogra 39 & Device CMYK \\
+  Conversion & \LaTeX & \LaTeX & luaicc & n/a & n/a \\
+  % \vrule width 0pt height 2ex
+  &%
   \selectmodel {rgb}%
   \colorselect{cmyk}{0.9,0.1,0.1,0}%
-  \vrule width 5em
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
+  \colorselect{srgb}{0.1,0.9,0.9}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
   \selectmodel {srgb}%
+  \colorselect{fogra}{0.9,0.1,0.1,0}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
+  \colorselect{fogra}{0.9,0.1,0.1,0}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
   \colorselect{cmyk}{0.9,0.1,0.1,0}%
-  \vrule width 5em
-  \selectmodel {sgrb}%
-  \colorselect{cmyk}{0.9,0.1,0.1,0}%
-  \vrule width 5em
+  \leaders\vrule\hfill
+  \null
+\end{tabular}
+
+(Of course, the similarity of the sRGB conversion by luaicc and the Fogra 39
+color can appear better than it is since your system has to convert the color
+too in order to display it, using probably quite similar rules. So to really judge the quality, you need a calibrated screen with a color gamut bigger than both colorspaces.)
+
+An example in the opposite direction is this conversion of RGB $(0.5, 0.5, 0)$:
+
+\begin{tabular}{c|ccccc}
+  Colorspace & Device RGB & sRGB & sRGB & Fogra 39 & Device CMYK \\
+  Conversion & n/a & n/a & luaicc & \LaTeX & \LaTeX \\
+  % \vrule width 0pt height 2ex
+  &%
+  \colorselect{rgb}{.5,.5,0}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
+  \colorselect{srgb}{.5,.5,0}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
+  \selectmodel {fogra}%
+  \colorselect{srgb}{.5,.5,0}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
+  \colorselect{fogra}{0,0,.5,.5}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
   \selectmodel {cmyk}%
-  \colorselect{cmyk}{0.9,0.1,0.1,0}%
-  \vrule width 5em
+  \colorselect{rgb}{.5,.5,0}%
+  \leaders\vrule\hfill
+  \null
+\end{tabular}
+
+Of course, converting colors only works relibly if the color is in the target colorspace's gamut.
+Otherwise it can't be represented. Take for example the conversion of $RGB (1, 1, 0)$:
+
+\begin{tabular}{c|ccccc}
+  Colorspace & Device RGB & sRGB & sRGB & Fogra 39 & Device CMYK \\
+  Conversion & n/a & n/a & luaicc & \LaTeX & \LaTeX \\
+  % \vrule width 0pt height 2ex
+  &%
+  \colorselect{rgb}{1,1,0}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
+  \colorselect{srgb}{1,1,0}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
+  \selectmodel {fogra}%
+  \colorselect{srgb}{1,1,0}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
+  \colorselect{fogra}{0,0,1,0}%
+  \leaders\vrule\hfill
+  \kern-6pt
+  &%
+  \kern-6pt
+  \selectmodel {cmyk}%
+  \colorselect{rgb}{1,1,0}%
+  \leaders\vrule\hfill
+  \null
+\end{tabular}
+
+luaicc does have support to identify such cases, such that the user can be warned or some indication added to the colored segment.
 \end{document}
