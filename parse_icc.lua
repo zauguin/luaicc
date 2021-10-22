@@ -9,6 +9,8 @@ local getposition = fio.getposition
 local setposition = fio.setposition
 local skipposition = fio.skipposition
 
+local warn = texio and texio.write_nl or print
+
 local function from_utf16be(s)
   local codepoints = {}
   local i = 0
@@ -1361,11 +1363,38 @@ local interpolate_polar do
   end
 end
 
+local function calc_profile_id(f)
+  f:seek('set')
+  local data = f:read(44) .. '\0\0\0\0'
+  f:seek('cur', 4)
+  data = data .. f:read(16) .. '\0\0\0\0'
+  f:seek('cur', 4)
+  data = data .. f:read(16) .. '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
+  f:seek('cur', 16)
+  data = data .. f:read'a'
+  return md5.sum(data), f:seek()
+end
+
 local function load_profile(filename)
   local f, msg = io.open(filename, 'rb')
   if not f then return f, msg end
   local profile, err = read_profile(f)
+  local id, size = calc_profile_id(f)
   f:close()
+  if profile then
+    if profile.header.size ~= size then
+      warn'luaicc:    We were able to parse the profile, but the embedded size \z
+      does not match the actual file size.\n'
+    elseif profile.header.id ~= id then -- We ignore this if the sizes don't match since then there are bigger issues
+      if profile.header.id then
+        local exp_high, exp_low = string.unpack('>I8I8', profile.header.id)
+        local actual_high, actual_low = string.unpack('>I8I8', id)
+        warn(string.format('luaicc:    Profile ID mismatch. The profile claims to have ID %016X%016X, \z
+        but it\'s actual ID is %016X%016X\n', exp_high, exp_low, actual_high, actual_low))
+      end
+      profile.header.id = id
+    end
+  end
   return profile, err
 end
 
@@ -1416,4 +1445,8 @@ return {
   interpolate_lchuv = interpolate_polar(from_luv, to_luv),
   input_components = input_components,
   profile_class = profile_class,
+  profile_id = function(profile)
+    local high, low = string.unpack('>I8I8', profile.header.id)
+    return string.format('%016X%016X', high, low)
+  end,
 }
