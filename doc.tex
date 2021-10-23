@@ -1,0 +1,83 @@
+\documentclass{l3doc}
+\title{The \texttt{parse\_icc\_tex} module -- A \TeX\ interface for luaicc}
+\author{Marcel F. Krüger}
+\begin{document}
+\maketitle
+\begin{documentation}
+The \texttt{parse\_icc\_tex} Lua module defines a plain \TeX\ like interface consisting of three commands:
+
+\begin{function}{\LoadProfile}
+  \begin{syntax}
+    |\LoadProfile| \meta{csname} \Arg{filename}
+  \end{syntax}
+  \meta{csname} will be defined to represent the profile loaded from \Arg{filename} in other commands. If \meta{csname} is already defined, it will be overwritten.
+
+  The defined control sequence \meta{csname} can not be used on it's own but only in other commands from luaicc.
+
+  A simple example would be
+\begin{verbatim}
+% \LoadProfile \sRGB {sRGB.icc}
+\end{verbatim}
+\end{function}
+
+\begin{function}[EXP]{\ProfileInfo}
+  \begin{syntax}
+    |\ProfileInfo components| \meta{profile}\\
+    |\ProfileInfo class| \meta{profile}\\
+  \end{syntax}
+  The profile provided in \meta{profile} must be a control sequence defined with \cmd\LoadProfile.
+
+  When called with the |components| option, the function expands to the number of components in it's color space. (E.g.\ 3 for RGB spaces, 4 for CMYK spaces, etc.) The number will always be between 1 and 15.
+
+  When called with the |class| option, the expansion is the 4 character tag representing the profile class. The seven options are |scnr| for input device profiles, |mntr| for display device profiles, |prtr| for output device profiles, |spac| for color space profiles, |link| for device link profiles, |abst| for abstract profiles and |nmcl| for named color profiles.
+
+  The number of components for the \cmd\sRGB\ profile loaded by the previous example could e.g.\ be queried with
+\begin{verbatim}
+% \ProfileInfo components\sRGB
+\end{verbatim}
+\end{function}
+
+\begin{function}{\ApplyProfile}
+  \begin{syntax}
+    |\ProfileInfo |[|delim|\meta{delimiter}] [|gamut|\meta{out-of-gamut tag}] [\meta{rendering intent}] [\meta{interpolation space} [|inverse|]] \meta{target profile} \meta{n}\\
+    \meta{source profile$_1$} \meta{source color$_1$} \meta{weight$_1$}\\
+    \dots\\
+    \meta{source profile$_{n-1}$} \meta{source color$_{n-1}$} \meta{weight$_{n-1}$}\\
+    \meta{source profile$_n$} \meta{source color$_n$}\\
+  \end{syntax}
+  (The [] here do indicate optional arguments and not literal |[| and |]| to be written in the source code.)
+
+  To actually convert colors between profiles, \cmd\ApplyProfile\ is used. Beside just converting, it also allows interpolating between colors in different colorspaces.
+
+  It expands to the components of the color separated by \meta{delimiter} (which must be a single token and defaults to spaces if it is not provided) in the profile given by \meta{target profile}.
+  If |gamut| is given, the token provided as \meta{out-of-gamut tag} is prepended if the color is outside of the gamut of \meta{target profile}.
+
+  The used rendering intent is given by \meta{rendering intent}. It must be one of \texttt{perceptual}, \texttt{colorimetric}, or \texttt{saturation}. If it is not provided, the default is unspecified and might change in later versions.
+
+  The number of source colors is given in \meta{n}.
+  It must be a positive integer.
+  If it is not 1, the source colors and interpolated based on the intergers given as \meta{weight$_i$}.
+  The last weight is not explicitly provided but automatically determined such that the sum of all weights is 1000.
+
+  The colorspace the interpolation i done is is selected by the \meta{interpolation space} option. The options are \texttt{lab} for CIELab, \texttt{xyz} for CIEXYZ, \texttt{xyy} for xyY, \texttt{luv} for CIELUV and the cylindrical options \texttt{lch} for CIELCh and \texttt{lchuv} for CIELCh(uv). The default in unspecified and subject to change.
+
+  The two cylindrical spaces can be followed by the \texttt{inverse} keyword to interpolate along the longer instead of the shorter path for the hue component.
+
+  The \meta{source color$_i$}'s are given by space separated components corresponding to the given \meta{source profile$_i$}.
+
+  An example for simple color conversion from the cyan primary in a CMYK space \cmd\myCMYK\ to a RGB space \cmd\sRGB\ with result components separated by commas would be
+\begin{verbatim}
+% \ApplyProfile delim, \sRGB 1 \myCMYK 1 0 0 0
+\end{verbatim}
+
+To mix 10\% of \cmd\sRGB's green with 30\% of \cmd\myCMYK's yellow and 60\% of \cmd\sRGB's red and return the (space separated) result in \cmd\myCMYK, while doing all calculations in CIELUV, the invocation is
+\begin{verbatim}
+% \ApplyProfile luv \myCMYK 3
+% \sRGB     0 1 0   100
+%   \myCMYK 0 0 1 0 300
+%   \sRGB   1 0 0
+\end{verbatim}
+\end{function}
+
+\end{documentation}
+\end{document}
