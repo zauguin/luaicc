@@ -1432,21 +1432,40 @@ local function profile_class(profile)
   return profile.header.profile_class
 end
 
+local lookup = setmetatable({}, {__mode = 'k'})
+
+local function do_lookup(...)
+  if select('#', ...) == 0 then return end
+  local arg = ...
+  local profile = lookup[arg]
+  return profile or arg, do_lookup(select(2, ...))
+end
+
+local function wrap_function(func)
+  return function(...) return func(do_lookup(...)) end
+end
+
 return {
-  load = load_profile,
-  map = map_values,
-  convert = convert,
-  apply_device_link = apply_device_link,
-  interpolate_lab = interpolate(from_lab, to_lab),
-  interpolate_xyz = interpolate(from_xyz, to_xyz),
-  interpolate_xyY = interpolate(from_xyY, to_xyY),
-  interpolate_luv = interpolate(from_luv, to_luv),
-  interpolate_lch = interpolate_polar(from_lab, to_lab),
-  interpolate_lchuv = interpolate_polar(from_luv, to_luv),
-  input_components = input_components,
-  profile_class = profile_class,
-  profile_id = function(profile)
+  load = function(filename)
+    local profile, msg = load_profile(filename)
+    if not profile then return profile, msg end
+    local key = {}
+    lookup[key] = profile
+    return key
+  end,
+  map = wrap_function(map_values),
+  convert = wrap_function(convert),
+  apply_device_link = wrap_function(apply_device_link),
+  interpolate_lab = wrap_function(interpolate(from_lab, to_lab)),
+  interpolate_xyz = wrap_function(interpolate(from_xyz, to_xyz)),
+  interpolate_xyY = wrap_function(interpolate(from_xyY, to_xyY)),
+  interpolate_luv = wrap_function(interpolate(from_luv, to_luv)),
+  interpolate_lch = wrap_function(interpolate_polar(from_lab, to_lab)),
+  interpolate_lchuv = wrap_function(interpolate_polar(from_luv, to_luv)),
+  input_components = wrap_function(input_components),
+  profile_class = wrap_function(profile_class),
+  profile_id = wrap_function(function(profile)
     local high, low = string.unpack('>I8I8', profile.header.id)
     return string.format('%016X%016X', high, low)
-  end,
+  end),
 }
