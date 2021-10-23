@@ -116,7 +116,7 @@ too in order to display it, using probably quite similar rules. So to really jud
 An example in the opposite direction is this conversion of RGB $(0.5, 0.5, 0)$:
 
 \begin{tabular}{c|ccccc}
-  Colorspace & Device RGB & sRGB & sRGB & Fogra 39 & Device CMYK \\
+  Colorspace & Device RGB & sRGB & Fogra 39 & Fogra 39 & Device CMYK \\
   Conversion & n/a & n/a & luaicc & \LaTeX & \LaTeX \\
   % \vrule width 0pt height 2ex
   &%
@@ -147,11 +147,11 @@ An example in the opposite direction is this conversion of RGB $(0.5, 0.5, 0)$:
   \null
 \end{tabular}
 
-Of course, converting colors only works relibly if the color is in the target colorspace's gamut.
+Of course, converting colors only works reliably if the color is in the target colorspace's gamut.
 Otherwise it can't be represented. Take for example the conversion of $RGB (1, 1, 0)$:
 
 \begin{tabular}{c|ccccc}
-  Colorspace & Device RGB & sRGB & sRGB & Fogra 39 & Device CMYK \\
+  Colorspace & Device RGB & sRGB & Fogra 39 & Fogra 39 & Device CMYK \\
   Conversion & n/a & n/a & luaicc & \LaTeX & \LaTeX \\
   % \vrule width 0pt height 2ex
   &%
