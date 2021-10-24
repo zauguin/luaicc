@@ -1208,21 +1208,33 @@ local from_lab, from_xyz do
     return values, gamut
   end
 
-  function from_lab(profile, values, intent)
+  function from_xyz(profile, values, intent)
+    if intent == 3 and (not profile.B2D3) and profile.wtpt and profile.wtpt[1] then
+      local whitepoint = profile.wtpt[1]
+      table.print{whitepoint, {pcs_illuminant_x, pcs_illuminant_y, pcs_illuminant_z}}
+      values[1], values[2], values[3] =
+        values[1] * pcs_illuminant_x / whitepoint[1],
+        values[2] * pcs_illuminant_y / whitepoint[2],
+        values[3] * pcs_illuminant_z / whitepoint[3]
+    end
     local pcs = profile.header.colorspace_pcs
-    if pcs == 'XYZ' then
-      values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
-    elseif pcs ~= 'Lab' then
+    if pcs == 'Lab' then
+      values[1], values[2], values[3] = xyz_to_lab(values[1], values[2], values[3])
+    elseif pcs ~= 'XYZ' then
       return nil, "Unexpected PCS"
     end
     return from_pcs(profile, values, intent)
   end
 
-  function from_xyz(profile, values, intent)
+  function from_lab(profile, values, intent)
+    if intent == 3 and (not profile.B2D3) and profile.wtpt and profile.wtpt[1] then -- Scaling requires xyz
+      values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
+      return from_xyz(profile, values, intent)
+    end
     local pcs = profile.header.colorspace_pcs
-    if pcs == 'Lab' then
-      values[1], values[2], values[3] = xyz_to_lab(values[1], values[2], values[3])
-    elseif pcs ~= 'XYZ' then
+    if pcs == 'XYZ' then
+      values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
+    elseif pcs ~= 'Lab' then
       return nil, "Unexpected PCS"
     end
     return from_pcs(profile, values, intent)
@@ -1237,7 +1249,21 @@ local function to_pcs(profile, values, intent)
   end
   local err values, err = mapping:map(values)
   if not values then return nil, err end
-  return values, profile.header.colorspace_pcs
+  if intent == 3 and mapping ~= profile.D2B3 and profile.wtpt and profile.wtpt[1] then
+    if profile.header.colorspace_pcs == 'Lab' then
+      values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
+    elseif profile.header.colorspace_pcs ~= 'XYZ' then
+      return nil, "Unexpected PCS"
+    end
+    local whitepoint = profile.wtpt[1]
+    values[1], values[2], values[3] =
+      values[1] * whitepoint[1] / pcs_illuminant_x,
+      values[2] * whitepoint[2] / pcs_illuminant_y,
+      values[3] * whitepoint[3] / pcs_illuminant_z
+    return values, 'XYZ'
+  else
+    return values, profile.header.colorspace_pcs
+  end
 end
 
 local function to_lab(profile, values, intent)

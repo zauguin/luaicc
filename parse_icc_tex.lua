@@ -35,12 +35,30 @@ functions[funcid] = function()
   loaded_profiles[profile_id] = profile
 end
 
+local funcid = luatexbase.new_luafunction'UnloadProfile'
+token.set_lua('UnloadProfile', funcid, 'global', 'protected')
+functions[funcid] = function()
+  local t
+  repeat
+    t = token.scan_token()
+  until t.command ~= relax and t.command ~= spacer
+  local index = t.index
+  if t.command ~= luacall or functions[index] ~= handler then
+    error[[Profile expected]]
+  end
+  loaded_profiles[index] = nil
+  functions[index] = nil
+  if false then
+    luatexbase.free_luafunction(index)
+  end
+end
+
 funcid = luatexbase.new_luafunction'ApplyProfile'
 token.set_lua('ApplyProfile', funcid, 'global')
 functions[funcid] = function()
   local delim = token.scan_keyword'delim' and token.get_next() or ' '
   local out_of_gamut_tag = token.scan_keyword'gamut' and token.get_next()
-  local intent = token.scan_keyword'perceptual' and 0 or token.scan_keyword'colorimetric' and 1 or token.scan_keyword'saturation' and 2 or 1
+  local intent = token.scan_keyword'perceptual' and 0 or token.scan_keyword'colorimetric' and 1 or token.scan_keyword'saturation' and 2 or token.scan_keyword'absolute' and 3 or 1
   local polar = token.scan_keyword'lchuv' and parse_icc.interpolate_lchuv or token.scan_keyword'lch' and parse_icc.interpolate_lch
   local inverse = polar and token.scan_keyword'inverse'
   local interpolate = polar or token.scan_keyword'lab' and parse_icc.interpolate_lab or token.scan_keyword'luv' and parse_icc.interpolate_luv or token.scan_keyword'xyz' and parse_icc.interpolate_xyz or token.scan_keyword'xyy' and parse_icc.interpolate_xyY or parse_icc.interpolate_lab
