@@ -52,7 +52,7 @@ The \texttt{parse\_icc\_tex} Lua module defines a plain \TeX\ like interface con
   It expands to the components of the color separated by \meta{delimiter} (which must be a single token and defaults to spaces if it is not provided) in the profile given by \meta{target profile}.
   If |gamut| is given, the token provided as \meta{out-of-gamut tag} is prepended if the color is outside of the gamut of \meta{target profile}.
 
-  The used rendering intent is given by \meta{rendering intent}. It must be one of \texttt{perceptual}, \texttt{colorimetric}, or \texttt{saturation}. If it is not provided, the default is unspecified and might change in later versions.
+  The used rendering intent is given by \meta{rendering intent}. It must be one of \texttt{perceptual}, \texttt{colorimetric}, \texttt{absolute}, or \texttt{saturation}. If it is not provided, the default is unspecified and might change in later versions.
 
   The number of source colors is given in \meta{n}.
   It must be a positive integer.
