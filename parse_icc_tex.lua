@@ -77,10 +77,16 @@ functions[funcid] = function()
   local args = {profile, intent}
   for i = 1, num do
     local prof = is_device_link and profile or scan_profile()
-    local components = {}
-    local num_components = assert(parse_icc.input_components(prof))
-    for j = 1, num_components do
-      components[j] = token.scan_real()
+    local class = parse_icc.profile_class(prof)
+    local components
+    if class == 'nmcl' then
+      components = token.scan_argument()
+    else
+      components = {}
+      local num_components = assert(parse_icc.input_components(prof))
+      for j = 1, num_components do
+        components[j] = token.scan_real()
+      end
     end
     args[3*i] = prof
     args[3*i+1] = components

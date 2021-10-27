@@ -708,6 +708,39 @@ local function read_mft(f, size, precision, tag, header)
   return mapping
 end
 
+local function read_ascii_name(f)
+  return f:read(32):match'^[^\0]*'
+end
+
+-- Special case: Named color profiles
+local function read_ncl2(f, size, offset, tag, profile)
+  readu32(f)
+  local flags_vendor = readu16(f)
+  local flags_icc = readu16(f)
+  local count = readu32(f)
+  local dev_coords = readu32(f)
+
+  local prefix = read_ascii_name(f)
+  local suffix = read_ascii_name(f)
+
+  local colors = lua.newtable(count, 0)
+  local decode = profile.header.colorspace_pcs == 'XYZ' and decode_xyz or profile.header.colorspace_pcs == 'Lab' and decode_lab_legacy
+  if not decode then
+    return nil, 'Unexpected PCS'
+  end
+  for i = 1, count do
+    local root = read_ascii_name(f)
+    local coords = readcardinaltable(f, 3, 2)
+    coords[1], coords[2], coords[3] = coords[1] / 65535, coords[2] / 65535, coords[3] / 65535
+    decode:map(coords)
+    skipposition(f, dev_coords * 2)
+    colors[prefix .. root .. suffix] = {
+      pcs = coords,
+    }
+  end
+  return colors
+end
+
 -- Now mpet: Work with floats directly instead of mapping everything to integers.
 local read_mpet do
   -- This parser is *slow*, but I don't know a better way to parse a bunch of floats in Lua.
@@ -967,6 +1000,7 @@ local tag_readers = {
     end
     return entries
   end,
+  ncl2  = read_ncl2,
 }
 
 -- M={a, b, c, d, e, f, g, h, i}
@@ -1098,6 +1132,9 @@ local function read_profile(f)
     -- else
     --   print(string.format("Skipping %q since no reader for %q is available", tag, data_type))
     end
+  end
+  if header.profile_class == 'nmcl' then
+    return profile
   end
   return synthesize_matrix_transforms(profile)
 end
@@ -1242,13 +1279,21 @@ local from_lab, from_xyz do
 end
 
 local function to_pcs(profile, values, intent)
-  values = table.move(values, 1, #values, 1, {})
-  local mapping = profile['D2B' .. (intent or 0)] or profile['A2B' .. (intent or 0)] or profile['A2B0']
-  if not mapping then
-    return nil, "Requested conversion not supported by profiles"
+  local mapping
+  if profile.header.profile_class == 'nmcl' then
+    values = profile.ncl2[values]
+    if not values then return nil, 'Named color not found' end
+    values = values.pcs
+    values = table.move(values, 1, #values, 1, {})
+  else
+    values = table.move(values, 1, #values, 1, {})
+    mapping = profile['D2B' .. (intent or 0)] or profile['A2B' .. (intent or 0)] or profile['A2B0']
+    if not mapping then
+      return nil, "Requested conversion not supported by profiles"
+    end
+    local err values, err = mapping:map(values)
+    if not values then return nil, err end
   end
-  local err values, err = mapping:map(values)
-  if not values then return nil, err end
   if intent == 3 and mapping ~= profile.D2B3 and profile.wtpt and profile.wtpt[1] then
     if profile.header.colorspace_pcs == 'Lab' then
       values[1], values[2], values[3] = lab_to_xyz(values[1], values[2], values[3])
