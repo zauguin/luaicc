@@ -1322,6 +1322,9 @@ local function convert(target, intent, source, values)
 end
 
 local function apply_device_link(profile, values)
+  if profile.header.profile_class ~= 'link' then
+    return nil, 'Not a DeviceLink profile'
+  end
   values = table.move(values, 1, #values, 1, {})
   local mapping = profile.D2B0 or profile.A2B0
   if not mapping then
