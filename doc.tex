@@ -64,6 +64,9 @@ The \texttt{parse\_icc\_tex} Lua module defines a plain \TeX\ like interface con
   The two cylindrical spaces can be followed by the \texttt{inverse} keyword to interpolate along the longer instead of the shorter path for the hue component.
 
   The \meta{source color$_i$}'s are given by space separated components corresponding to the given \meta{source profile$_i$}.
+  Except if \meta{source profile$_i$} is a named color profile, then \meta{source color$_i$} is a single braced argument containing a color name.
+
+  As a special case, when \meta{target profile} is a device link profile, then \meta{n} is not given explicitly and implicitly has the value $1$. Also \meta{source profile$_1$} is omitted since it does not apply.
 
   An example for simple color conversion from the cyan primary in a CMYK space \cmd\myCMYK\ to a RGB space \cmd\sRGB\ with result components separated by commas would be
 \begin{verbatim}
