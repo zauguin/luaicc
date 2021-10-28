@@ -2,6 +2,7 @@
 \DeclareDocumentMetadata{}
 \pdfvariable compresslevel0
 \documentclass{article}
+\usepackage[margin=10pt]{geometry}
 \usepackage{array}
 \directlua{require'parse_icc_tex'}
 \begin{document}
@@ -83,8 +84,14 @@
   sRGB red --- sRGB cyan (Luv)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 1  }\vrule width .1pt
   }\\
+  sRGB red --- sRGB cyan (OkLab)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklab \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 1  }\vrule width .1pt
+  }\\
   sRGB red --- sRGB cyan (LCh)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lch \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 1  }\vrule width .1pt
+  }\\
+  sRGB red --- sRGB cyan (OkLCh)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklch \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 1  }\vrule width .1pt
   }\\
   sRGB red --- sRGB green (Lab)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lab \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
@@ -98,11 +105,17 @@
   sRGB red --- sRGB green (Luv)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
   }\\
+  sRGB red --- sRGB green (OkLab)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklab \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
+  }\\
   sRGB red --- sRGB green (LCh)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lch \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
   }\\
   sRGB red --- sRGB green (LChuv)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lchuv \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
+  }\\
+  sRGB red --- sRGB green (OkLCh)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklch \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
   }\\
   sRGB red --- sRGB green (LCh inverse)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lch inverse \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
@@ -110,17 +123,17 @@
   sRGB red --- sRGB green (LChuv inverse)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lchuv inverse \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
   }\\
-  sRGB green --- sRGB green (LCh)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lch \sRGB 2 \sRGB 0 .8 0 #1 \sRGB 0 .8 0  }\vrule width .1pt
-  }\\
-  sRGB green --- sRGB green (LChuv)&\iterate{
-    \colorselect{srgb}{\ApplyProfile delim, lchuv \sRGB 2 \sRGB 0 .8 0 #1 \sRGB 0 .8 0  }\vrule width .1pt
+  sRGB red --- sRGB green (OkLCh inverse)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklch inverse \sRGB 2 \sRGB 1 0 0 #1 \sRGB 0 1 0  }\vrule width .1pt
   }\\
   sRGB green --- sRGB green (LCh inverse)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lch inverse \sRGB 2 \sRGB 0 .8 0 #1 \sRGB 0 .8 0  }\vrule width .1pt
   }\\
   sRGB green --- sRGB green (LChuv inverse)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lchuv inverse \sRGB 2 \sRGB 0 .8 0 #1 \sRGB 0 .8 0  }\vrule width .1pt
+  }\\
+  sRGB green --- sRGB green (OkLCh inverse)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklch inverse \sRGB 2 \sRGB 0 .8 0 #1 \sRGB 0 .8 0  }\vrule width .1pt
   }\\
   green --- red&\iterate{
     \colorselectN{green!#1/10!red}\vrule width .1pt
@@ -137,11 +150,17 @@
   sRGB green --- sRGB red (Luv)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
   }\\
+  sRGB green --- sRGB red (OkLab)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklab \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
+  }\\
   sRGB green --- sRGB red (LCh)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lch \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
   }\\
   sRGB green --- sRGB red (LChuv)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lchuv \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
+  }\\
+  sRGB green --- sRGB red (OkLCh)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklch \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 0 0 }\vrule width .1pt
   }\\
   blue --- red&\iterate{
     \colorselectN{blue!#1/10!red}\vrule width .1pt
@@ -157,6 +176,9 @@
   }\\
   sRGB blue --- sRGB red (Luv)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, luv\sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 0 0  }\vrule width .1pt
+  }\\
+  sRGB blue --- sRGB red (OkLab)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklab\sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 0 0  }\vrule width .1pt
   }\\
   sRGB blue --- sRGB red (LCh)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, lch \sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 0 0  }\vrule width .1pt
@@ -176,6 +198,9 @@
   sRGB red --- sRGB white (Luv)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 1 0 0 #1 \sRGB 1 1 1  }\vrule width .1pt
   }\\
+  sRGB red --- sRGB white (OkLab)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklab \sRGB 2 \sRGB 1 0 0 #1 \sRGB 1 1 1  }\vrule width .1pt
+  }\\
   green --- white&\iterate{
     \colorselectN{green!#1/10!white}\vrule width .1pt
   }\\
@@ -191,6 +216,9 @@
   sRGB green --- sRGB white (Luv)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 1 1  }\vrule width .1pt
   }\\
+  sRGB green --- sRGB white (OkLab)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklab \sRGB 2 \sRGB 0 1 0 #1 \sRGB 1 1 1  }\vrule width .1pt
+  }\\
   blue --- white&\iterate{
     \colorselectN{blue!#1/10!white}\vrule width .1pt
   }\\
@@ -205,6 +233,9 @@
   }\\
   sRGB blue --- sRGB white (Luv)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, luv \sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
+  }\\
+  sRGB blue --- sRGB white (OkLab)&\iterate{
+    \colorselect{srgb}{\ApplyProfile delim, oklab \sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
   }\\
   \gdef \gamutmark #1,#2,#3,#4{0.0,1.0,0.0,0.0}
   sRGB blue --- sRGB white (in fogra)&\iterate{

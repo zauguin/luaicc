@@ -59,9 +59,9 @@ functions[funcid] = function()
   local delim = token.scan_keyword'delim' and token.get_next() or ' '
   local out_of_gamut_tag = token.scan_keyword'gamut' and token.get_next()
   local intent = token.scan_keyword'perceptual' and 0 or token.scan_keyword'colorimetric' and 1 or token.scan_keyword'saturation' and 2 or token.scan_keyword'absolute' and 3 or 1
-  local polar = token.scan_keyword'lchuv' and parse_icc.interpolate_lchuv or token.scan_keyword'lch' and parse_icc.interpolate_lch
+  local polar = token.scan_keyword'lchuv' and parse_icc.interpolate_lchuv or token.scan_keyword'lch' and parse_icc.interpolate_lch or token.scan_keyword'oklch' and parse_icc.interpolate_oklch
   local inverse = polar and token.scan_keyword'inverse'
-  local interpolate = polar or token.scan_keyword'lab' and parse_icc.interpolate_lab or token.scan_keyword'luv' and parse_icc.interpolate_luv or token.scan_keyword'xyz' and parse_icc.interpolate_xyz or token.scan_keyword'xyy' and parse_icc.interpolate_xyY or parse_icc.interpolate_lab
+  local interpolate = polar or token.scan_keyword'lab' and parse_icc.interpolate_lab or token.scan_keyword'luv' and parse_icc.interpolate_luv or token.scan_keyword'xyz' and parse_icc.interpolate_xyz or token.scan_keyword'xyy' and parse_icc.interpolate_xyY or token.scan_keyword'oklab' and parse_icc.interpolate_oklab or parse_icc.interpolate_lab
   local profile = scan_profile()
   local is_device_link = parse_icc.profile_class(profile) == 'link'
   local num = is_device_link and 1 or token.scan_int()

@@ -1226,6 +1226,33 @@ local xyz_to_xyY, xyY_to_xyz do
   end
 end
 
+local xyz_to_oklab, oklab_to_xyz do
+  function xyz_to_oklab(x, y, z)
+    x, y, z =
+      0.7834898375168267   * x + 0.34620526096783555 * y - 0.12328270076584187 * z,
+      0.033286024611737325 * x + 0.9378059025702143  * y + 0.03647601494354491 * z,
+      0.057805240900846856 * x + 0.3170469259731162  * y + 0.7601602611873396  * z
+    x, y, z = x^(1/3), y^(1/3), z^(1/3)
+    return
+      0.2104542553 * x + 0.793617785  * y - 0.0040720468 * z,
+      1.9779984951 * x - 2.428592205  * y + 0.4505937099 * z,
+      0.0259040371 * x + 0.7827717662 * y - 0.808675766  * z
+  end
+
+  function oklab_to_xyz(l, a, b)
+    l, a, b =
+      l + 0.3963377921737678  * a + 0.21580375806075883 * b,
+      l - 0.10556134232365633 * a - 0.0638541747717059  * b,
+      l - 0.08948418209496574 * a - 1.2914855378640917  * b
+      
+    l, a, b = l*l*l, a*a*a, b*b*b
+    return
+      1.2825209708260454   * l - 0.5527477958147399 * a + 0.2345225014182621  * b,
+      -0.04241592446774463 * l + 1.1021827755310842 * a - 0.05976685106333974 * b,
+      -0.07983657961728767 * l - 0.4176644815032224 * a + 1.3226056636309707  * b
+  end
+end
+
 -- These functions will modify the values input table
 local from_lab, from_xyz do
   local function from_pcs(profile, values, intent)
@@ -1352,6 +1379,17 @@ end
 local function to_luv(profile, values, intent)
   values = to_xyz(profile, values, intent)
   values[1], values[2], values[3] = xyz_to_luv(values[1], values[2], values[3])
+  return values
+end
+
+local function from_oklab(profile, values, intent)
+  values[1], values[2], values[3] = oklab_to_xyz(values[1], values[2], values[3])
+  return from_xyz(profile, values, intent)
+end
+
+local function to_oklab(profile, values, intent)
+  values = to_xyz(profile, values, intent)
+  values[1], values[2], values[3] = xyz_to_oklab(values[1], values[2], values[3])
   return values
 end
 
@@ -1534,8 +1572,10 @@ return {
   interpolate_xyz = wrap_function(interpolate(from_xyz, to_xyz)),
   interpolate_xyY = wrap_function(interpolate(from_xyY, to_xyY)),
   interpolate_luv = wrap_function(interpolate(from_luv, to_luv)),
+  interpolate_oklab = wrap_function(interpolate(from_oklab, to_oklab)),
   interpolate_lch = wrap_function(interpolate_polar(from_lab, to_lab)),
   interpolate_lchuv = wrap_function(interpolate_polar(from_luv, to_luv)),
+  interpolate_oklch = wrap_function(interpolate_polar(from_oklab, to_oklab)),
   input_components = wrap_function(input_components),
   profile_class = wrap_function(profile_class),
   profile_id = wrap_function(function(profile)
