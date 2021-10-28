@@ -3,7 +3,7 @@
 \pdfvariable compresslevel0
 \documentclass{article}
 \usepackage[margin=10pt]{geometry}
-\usepackage{array}
+\usepackage{array,pbox}
 \directlua{require'parse_icc_tex'}
 \begin{document}
 \ExplSyntaxOn
@@ -237,20 +237,20 @@
   sRGB blue --- sRGB white (OkLab)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, oklab \sRGB 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
   }\\
-  \gdef \gamutmark #1,#2,#3,#4{0.0,1.0,0.0,0.0}
+  \gdef \gamutmark #1,#2,#3,#4{0.0,1.0,0.0,0.0}%
   sRGB blue --- sRGB white (in fogra)&\iterate{
     \colorselect{fogra}{\ApplyProfile delim, gamut\gamutmark \fogra 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
   }\\
   sRGB blue --- sRGB white (in fogra)&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, \sRGB 1 \fogra \ApplyProfile \fogra 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
   }\\
-  sRGB blue --- sRGB white (in fogra, colorimetric)6x&\iterate{
+  sRGB blue --- sRGB white (in fogra, colorimetric)&\iterate{
     \colorselect{fogra}{\ApplyProfile delim, colorimetric \fogra 2 \sRGB 0 0 1 #1 \sRGB 1 1 1  }\vrule width .1pt
   }\\
-  sRGB blue --- sRGB white (in fogra converted to sRGB, colorimetric)&\iterate{
+  \pbox[c]{\hsize}{sRGB blue --- sRGB white\\\hspace*{2em}(in fogra converted to sRGB, colorimetric)}&\iterate{
     \colorselect{srgb}{\ApplyProfile delim, colorimetric \sRGB 1 \fogra \ApplyProfile colorimetric \fogra 2 \sRGB 0 0 1 #1 \sRGB 1 1 1 }\vrule width .1pt
   }\\
-  sRGB black --- sRGB white (in fogra converted to sRGB, colorimetric)&\iterate{
+  \pbox[c]{\hsize}{sRGB black --- sRGB white\\\hspace*{2em}(in fogra converted to sRGB, colorimetric)}&\iterate{
     \colorselect{fogra}{\ApplyProfile delim, gamut\gamutmark \fogra 1 \sRGB \ApplyProfile colorimetric \sRGB 1 \fogra \ApplyProfile colorimetric \fogra 2 \sRGB 0 0 0 #1 \sRGB 1 1 1  }\vrule width .1pt
   }\\
 \end{tabular}
