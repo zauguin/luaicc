@@ -1275,7 +1275,6 @@ local from_lab, from_xyz do
   function from_xyz(profile, values, intent)
     if intent == 3 and (not profile.B2D3) and profile.wtpt and profile.wtpt[1] then
       local whitepoint = profile.wtpt[1]
-      table.print{whitepoint, {pcs_illuminant_x, pcs_illuminant_y, pcs_illuminant_z}}
       values[1], values[2], values[3] =
         values[1] * pcs_illuminant_x / whitepoint[1],
         values[2] * pcs_illuminant_y / whitepoint[2],
